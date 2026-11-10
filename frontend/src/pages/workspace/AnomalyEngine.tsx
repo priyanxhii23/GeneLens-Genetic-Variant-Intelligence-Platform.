@@ -1,13 +1,64 @@
-import { motion } from "framer-motion";
-import { Bug, ChevronLeft, ChevronRight, Microscope, Radar, RotateCcw, Sigma } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowUpRight, Bug, ChevronDown, ChevronLeft, ChevronRight, Compass, Microscope, Radar, RotateCcw, Sigma } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Plot from "../../components/Plot";
-import { Disclaimer, ErrorState, Explain, HelixLoader, Metric, NeedsAnalysis, PageHeader, Panel, stagger } from "../../components/ui";
+import { ClassBadge, Disclaimer, ErrorState, Guide, GuideItem, HelixLoader, Metric, NeedsAnalysis, PageHeader, Panel, PriorityBadge, ProvenanceBadge, stagger, Term } from "../../components/ui";
+import { useProvenance } from "../../lib/provenance";
 import { VariantDrawer } from "./VariantExplorer";
 import { api } from "../../lib/api";
 import { useAnalysis, useFetch } from "../../lib/analysis";
-import { fmtInt, token } from "../../lib/format";
-import type { Thresholds } from "../../lib/types";
+import { fmtAF, fmtInt, token } from "../../lib/format";
+import type { FlagItem, Thresholds } from "../../lib/types";
+
+function FlagCard({ f, onOpen, index }: { f: FlagItem; onOpen: () => void; index: number }) {
+  const [open, setOpen] = useState(f.priority === "high");
+  const km = KIND_META[f.kind];
+  const ring = f.priority === "high" ? "border-bad/40 hover:shadow-[0_0_0_1px_rgb(var(--bad)/0.4),0_10px_30px_-14px_rgb(var(--bad)/0.5)]"
+    : f.priority === "medium" ? "border-warn/30 hover:shadow-[0_0_0_1px_rgb(var(--warn)/0.35),0_10px_30px_-14px_rgb(var(--warn)/0.45)]" : "hover:border-accent/40";
+  return (
+    <motion.li layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: Math.min(index, 12) * 0.035 }}
+      className={`panel overflow-hidden transition-shadow ${ring}`}>
+      <span className={`absolute inset-y-0 left-0 w-1 ${f.priority === "high" ? "bg-bad" : f.priority === "medium" ? "bg-warn" : "bg-line"}`} aria-hidden />
+      <button className="w-full px-5 pb-3 pt-4 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <div className="flex flex-wrap items-center gap-2">
+          <PriorityBadge p={f.priority} />
+          <span className={`chip border-${km.color}/40 text-${km.color}`}>{km.label}</span>
+          {f.coarse_class && <ClassBadge cls={f.coarse_class} label={f.clinical_significance} />}
+          <ProvenanceBadge p={f.provenance} />
+          <span className="ml-auto font-mono text-[13px] text-muted">{f.variant_key}</span>
+        </div>
+        <div className="mt-2.5 flex items-start gap-3">
+          <div className="flex-1">
+            <div className="eyebrow !text-[12px]">Reason</div>
+            <h4 className="font-display text-[21px] leading-snug">{f.headline ?? f.category.replace(/_/g, " ")}</h4>
+            <p className="insight-reason mt-1 !text-[17px] !font-medium">{f.reason ?? f.explanation}</p>
+          </div>
+          <ChevronDown size={18} className={`mt-1 shrink-0 text-faint transition-transform ${open ? "rotate-180" : ""}`} />
+        </div>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3 }} className="overflow-hidden">
+            <div className="grid gap-4 border-t border-line/70 px-5 py-4 md:grid-cols-2">
+              <div>
+                <div className="mb-1 text-[14px] font-bold">Why this matters</div>
+                <p className="insight-detail">{f.why_it_matters ?? f.explanation}</p>
+              </div>
+              <div>
+                <div className="mb-1 flex items-center gap-1.5 text-[14px] font-bold"><Compass size={14} className="text-accent" />Recommended investigation</div>
+                <p className="insight-detail">{f.recommendation ?? "Inspect the full variant record."}</p>
+                {(f.af !== null || f.hgvsp) && <p className="meta mt-2">{f.hgvsp ? `${f.hgvsp} · ` : ""}AF {fmtAF(f.af)}</p>}
+              </div>
+            </div>
+            <div className="flex justify-end px-5 pb-4">
+              <button className="btn-ghost !py-1.5 text-[13px]" onClick={onOpen} disabled={!f.variant_id}>Full variant details <ArrowUpRight size={14} /></button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.li>
+  );
+}
 
 const KIND_META: Record<string, { label: string; color: string; icon: typeof Bug; desc: string }> = {
   biological_interest: { label: "Biological interest", color: "accent", icon: Microscope, desc: "Data look consistent, but the frequency–classification combination is unusual." },
@@ -27,6 +78,7 @@ const FIELDS: { k: keyof Thresholds; label: string; help: string; step: number }
 
 export default function AnomalyEngine() {
   const { analysisId, detail, refresh } = useAnalysis();
+  const { mode } = useProvenance();
   const [t, setT] = useState<Thresholds>(DEFAULTS);
   const [kind, setKind] = useState("");
   const [priority, setPriority] = useState("");
@@ -38,8 +90,8 @@ export default function AnomalyEngine() {
   const [version, setVersion] = useState(0);
 
   useEffect(() => { if (detail?.results?.anomaly_thresholds) setT(detail.results.anomaly_thresholds); }, [detail?.results?.anomaly_thresholds]);
-  useEffect(() => setPage(1), [kind, priority, category]);
-  const res = useFetch(analysisId && detail?.results ? () => api.anomalies({ analysis_id: analysisId, kind, priority, category, page, page_size: 30 }) : null, [analysisId, kind, priority, category, page, version, detail?.results]);
+  useEffect(() => setPage(1), [kind, priority, category, mode]);
+  const res = useFetch(analysisId && detail?.results ? () => api.anomalies({ analysis_id: analysisId, kind, priority, category, page, page_size: 30, provenance: mode }) : null, [analysisId, kind, priority, category, page, version, detail?.results, mode]);
   const summary = res.data?.summary;
 
   const catChart = useMemo(() => {
@@ -60,7 +112,7 @@ export default function AnomalyEngine() {
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
       <PageHeader index="06" title="Variant Anomaly Detection Engine"
-        subtitle="Three screening layers – configurable rules, robust within-class outliers and an Isolation Forest – each flag carrying its category, triggering evidence, priority and a plain-language explanation." />
+        subtitle="Three screening layers – configurable rules, robust within-class outliers and an Isolation Forest – each flag explained in plain language with a recommended next step." />
       <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
         <Panel eyebrow="configuration" title="Screening thresholds">
           <div className="space-y-3">
@@ -94,7 +146,7 @@ export default function AnomalyEngine() {
               return (
                 <button key={k} onClick={() => setKind(on ? "" : k)} aria-pressed={on} className={`panel p-4 text-left transition-all hover:-translate-y-0.5 ${on ? `border-${m.color}/60` : ""}`}>
                   <div className="flex items-center justify-between"><Icon size={16} className={`text-${m.color}`} /><span className="data text-xl">{fmtInt(summary?.by_kind[k] ?? 0)}</span></div>
-                  <div className="mt-2 text-sm font-medium">{m.label}</div><p className="mt-1 text-xs text-muted">{m.desc}</p>
+                  <div className="mt-2 text-sm font-medium">{m.label}</div><p className="mt-1 text-[13px] text-muted">{m.desc}</p>
                 </button>
               );
             })}
@@ -110,23 +162,9 @@ export default function AnomalyEngine() {
         <select className="input !w-auto !py-1 text-xs" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Category"><option value="">All categories</option>{Object.keys(summary?.by_category ?? {}).map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}</select>
       </>}>
         {res.error && <ErrorState message={res.error} onRetry={res.reload} />}
-        <ul className="space-y-2">
-          {res.data?.items.map((f) => {
-            const km = KIND_META[f.kind];
-            return (
-              <li key={f.id} className="rounded-xl border border-line bg-raised/40 p-4">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className={`chip ${f.priority === "high" ? "border-bad/40 text-bad" : f.priority === "medium" ? "border-warn/40 text-warn" : "border-line text-muted"}`}>{f.priority}</span>
-                  <span className={`chip border-${km.color}/40 text-${km.color}`}>{km.label}</span>
-                  <span className="font-medium">{f.category.replace(/_/g, " ")}</span>
-                  <button className="ml-auto font-mono text-accent underline decoration-dotted" onClick={() => f.variant_id && setOpen(f.variant_id)}>{f.variant_key}</button>
-                </div>
-                <p className="mt-2 text-sm text-muted">{f.explanation}</p>
-                <details className="mt-2 text-xs"><summary className="cursor-pointer text-faint">triggering evidence · score {f.score.toFixed(2)}</summary>
-                  <pre className="mt-2 overflow-x-auto rounded-lg bg-bg/60 p-3 font-mono text-[11px] text-muted scrollbar-thin">{JSON.stringify(f.evidence, null, 2)}</pre></details>
-              </li>
-            );
-          })}
+        <ul className="space-y-3">
+          {res.data?.items.map((f, i) => <FlagCard key={f.id} f={f} index={i} onOpen={() => f.variant_id && setOpen(f.variant_id)} />)}
+          {res.data && res.data.items.length === 0 && <li className="py-6 text-center text-muted">No flags for this selection{mode !== "REAL" ? " – synthetic flags exist only after a synthetic dataset is generated from this analysis" : ""}.</li>}
         </ul>
         {res.data && (
           <div className="mt-4 flex items-center justify-between text-sm text-muted">
@@ -138,12 +176,14 @@ export default function AnomalyEngine() {
           </div>
         )}
       </Panel>
-      <Explain>
-        <p><b>Rule-based screening</b> encodes explicit, adjustable criteria (e.g. a P/LP variant with AF ≥ 0.5%).</p>
-        <p><b>Robust outliers</b> use the median and median absolute deviation of log10 AF within each class – resistant to the skew that breaks mean/SD z-scores.</p>
-        <p><b>Isolation Forest</b> isolates points with random splits; points isolated in few splits have unusual feature combinations. It is seeded for reproducibility.</p>
-        <p>A high-frequency pathogenic variant can be entirely genuine – e.g. recessive carrier alleles or the sickle-cell allele, maintained by heterozygote advantage against malaria.</p>
-      </Explain>
+      <Guide title="How to read the anomaly engine">
+        <GuideItem term="Three kinds of flag"><b>Biological interest</b>: the data look consistent, but the frequency–classification combination is unusual. <b>Data quality</b>: the record may be incomplete or inconsistent. <b>Statistical outlier</b>: unusual compared with similar variants – no interpretation implied.</GuideItem>
+        <GuideItem term="Priority">Priority orders the review queue: <b>High</b> (e.g. a pathogenic variant above the 5% <Term k="BA1">BA1</Term> level), <b>Medium</b>, <b>Low</b>. It reflects how unusual the observation is, not how likely the classification is to be wrong.</GuideItem>
+        <GuideItem term="Rule-based screening">Explicit, adjustable criteria – for example "a <Term k="P/LP">P/LP</Term> variant with <Term k="AF">AF</Term> ≥ 0.5%". Change the thresholds on the left and press <b>Run screening</b>.</GuideItem>
+        <GuideItem term={<>Robust outliers and <Term k="Isolation Forest">Isolation Forest</Term></>}>Outliers use the median and <Term k="MAD">MAD</Term> of log-frequency within each class, which extreme values cannot distort. The Isolation Forest is a seeded machine-learning model that finds uncommon combinations of features.</GuideItem>
+        <GuideItem term="What not to conclude">A flag is <b>never</b> a statement that a variant is misclassified. Example: the sickle-cell allele is pathogenic yet common in some populations because carriers are protected against malaria (balancing selection).</GuideItem>
+        <GuideItem term="Where is the raw evidence?">The exact values and thresholds behind each flag remain available under <b>Technical evidence</b> in the full variant details.</GuideItem>
+      </Guide>
       <Disclaimer compact />
       <VariantDrawer id={open} onClose={() => setOpen(null)} />
     </motion.div>

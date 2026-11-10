@@ -1,14 +1,21 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import Plot from "../../components/Plot";
-import { ClassBadge, Explain, NeedsAnalysis, PageHeader, Panel, stagger } from "../../components/ui";
+import { ClassBadge, ErrorState, Guide, GuideItem, HelixLoader, Insight, NeedsAnalysis, PageHeader, Panel, ProvenanceBadge, stagger, Tabs, Term } from "../../components/ui";
+import { api } from "../../lib/api";
+import { useFetch } from "../../lib/analysis";
+import { useProvenance } from "../../lib/provenance";
 import { VariantDrawer } from "./VariantExplorer";
 import { useAnalysis } from "../../lib/analysis";
 import { CLASS_META, fmtAF, fmtInt, MAIN_CLASSES, pct, POP_LABELS, token } from "../../lib/format";
 
 export default function PopulationObservatory() {
   const { analysisId, detail } = useAnalysis();
-  const pops = detail?.results?.populations;
+  const { mode } = useProvenance();
+  const [grp, setGrp] = useState<"REAL" | "SYNTHETIC">("REAL");
+  const res = useFetch(analysisId && detail?.results ? () => api.populationsFor(analysisId, mode) : null, [analysisId, mode, detail?.results]);
+  const which = mode === "BOTH" ? grp : (mode as "REAL" | "SYNTHETIC");
+  const pops = res.data?.groups[which] ?? undefined;
   const [selected, setSelected] = useState<string[] | null>(null);
   const [classFilter, setClassFilter] = useState<string>("ALL");
   const [open, setOpen] = useState<number | null>(null);
@@ -40,13 +47,26 @@ export default function PopulationObservatory() {
   }, [pops, active]);
 
   if (!analysisId) return <NeedsAnalysis />;
-  if (!pops) return <Panel><p className="text-sm text-muted">Results not available yet.</p></Panel>;
+  if (res.loading && !res.data) return <HelixLoader label="Loading population data" />;
+  if (res.error) return <ErrorState message={res.error} onRetry={res.reload} />;
+  if (!pops) return <Insight tone="pink" label="Nothing to show" reason={which === "SYNTHETIC" ? "This analysis has no linked synthetic records yet." : "Population data is not available for this analysis."}><p>{which === "SYNTHETIC" ? "Generate a synthetic dataset in the Synthetic Lab first." : "The selected dataset may not report population-level counts (for example dbSNP or the ClinVar-only dataset)."}</p></Insight>;
+  const top = [...pops.groups].sort((a, b) => b.variants_observed - a.variants_observed)[0];
   const popmax = Object.entries(pops.pathogenic_popmax_distribution).sort((a, b) => b[1] - a[1]);
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
       <PageHeader index="04" title="Population Frequency Observatory"
-        subtitle={`Allele frequencies across gnomAD genetic-ancestry groups for ${fmtInt(pops.n_variants)} gnomAD variants. These are aggregate reference-sample frequencies – they cannot be used to infer anyone's ancestry or disease risk.`} />
+        subtitle={`Allele frequencies across genetic-ancestry groups for ${fmtInt(pops.n_variants)} ${which === "SYNTHETIC" ? "synthetic" : (detail?.results?.dataset?.frequency_source ?? "gnomAD")} records. These are aggregate reference-sample frequencies – they cannot be used to infer anyone's ancestry or disease risk.`}
+        actions={mode === "BOTH" ? <Tabs value={grp} onChange={setGrp} options={[{ value: "REAL", label: <><span className="h-2 w-2 rounded-full bg-gold" />Real</> }, { value: "SYNTHETIC", label: <><span className="h-2 w-2 rounded-full bg-pink" />Synthetic</> }]} /> : <ProvenanceBadge p={which} />} />
+      {pops.n_variants === 0 ? (
+        <Insight label="No population data" reason="The selected dataset does not report population-level allele counts.">
+          <p>Population breakdowns are available for <b>gnomAD</b> and <b>1000 Genomes</b> datasets. dbSNP and ClinVar-only analyses have no per-population counts.</p>
+        </Insight>
+      ) : top && (
+        <Insight label="Main observation" reason={`The ${top.label} group contributes the most observed variants (${fmtInt(top.variants_observed)}), which mainly reflects how many people from that group were sequenced.`}>
+          <p>Larger groups detect more rare variants simply because more chromosomes were examined (median <Term k="AN">allele number</Term> {fmtInt(Math.round(top.median_an))} here). Compare frequencies, not variant counts, when asking whether an allele is more common in one group. Missing values are shown explicitly and are <b>not</b> zero.</p>
+        </Insight>
+      )}
 
       <Panel bodyClass="p-4">
         <div className="flex flex-wrap items-center gap-2">
@@ -112,7 +132,14 @@ export default function PopulationObservatory() {
           </table>
         </div>
       </Panel>
-      <Explain>{pops.notes.map((n) => <p key={n}>{n}</p>)}</Explain>
+      <Guide>
+        <GuideItem term="Population groups">These represent <b>genetic ancestry groups</b> used in the reference dataset (for example <b>afr</b> = African / African American, <b>nfe</b> = non-Finnish European). They describe groups of sampled individuals, <b>not</b> an individual's identity.</GuideItem>
+        <GuideItem term={<Term k="AF">Allele frequency (AF)</Term>}>How frequently an alternate allele occurs in a sampled group. It is calculated as <b>AF = AC ÷ AN</b> – the number of chromosomes carrying the allele divided by the number examined. Example: AC = 5 out of AN = 50,000 gives AF = 0.0001 (1 in 10,000).</GuideItem>
+        <GuideItem term={<><Term k="AC">AC</Term> and <Term k="AN">AN</Term></>}><b>AC</b> (allele count) counts carriers' chromosomes; <b>AN</b> (allele number) counts all chromosomes successfully genotyped – about two per person. An extremely small AF such as <b>1e-6</b> usually means the allele was seen once or twice among a million chromosomes.</GuideItem>
+        <GuideItem term="Missing (n/a)">If a population has no reported allele number for a variant, its frequency is <b>unavailable</b>. This does <b>NOT</b> mean the allele frequency is zero – the site may not have been covered in that group.</GuideItem>
+        <GuideItem term={<Term k="grpmax">grpmax</Term>}>The highest frequency among large, non-bottlenecked groups. Small or founder groups (Amish, Ashkenazi Jewish, Finnish, Middle Eastern, "remaining") are excluded because chance and population history can inflate their frequencies.</GuideItem>
+        <GuideItem term="Important">Population-level genetic frequencies <b>cannot</b> be used to determine an individual's ancestry or predict their disease risk. They describe reference samples only.</GuideItem>
+      </Guide>
       <VariantDrawer id={open} onClose={() => setOpen(null)} />
     </motion.div>
   );

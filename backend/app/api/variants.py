@@ -128,7 +128,8 @@ def variant_detail(variant_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Variant not found")
     d = variant_to_dict(v)
     d["anomalies"] = [{"category": a.category, "kind": a.kind, "priority": a.priority, "score": a.score,
-                       "explanation": a.explanation, "evidence": a.evidence}
+                       "explanation": a.explanation, "evidence": a.evidence, "headline": a.headline,
+                       "reason": a.reason, "why_it_matters": a.why_it_matters, "recommendation": a.recommendation}
                       for a in db.scalars(select(AnomalyResult).where(AnomalyResult.variant_id == variant_id))]
     if v.provenance == "REAL" and v.chrom and v.pos and v.in_gnomad:
         d["links"] = {"gnomad": f"https://gnomad.broadinstitute.org/variant/{v.variant_key}?dataset=gnomad_r4"}

@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import Plot from "../../components/Plot";
-import { ErrorState, Explain, HelixLoader, NeedsAnalysis, PageHeader, Panel, stagger } from "../../components/ui";
+import { ErrorState, Guide, GuideItem, HelixLoader, Insight, NeedsAnalysis, PageHeader, Panel, stagger, Term } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAnalysis, useFetch } from "../../lib/analysis";
 import { fmtNum, token } from "../../lib/format";
@@ -87,10 +87,13 @@ export default function ConstraintObservatory() {
               <Plot data={obsExp} height={260} layout={{ barmode: "group", bargap: 0.35, bargroupgap: 0.08, yaxis: { title: { text: "variants" } } }} />
             </Panel>
           </div>
-          <Panel eyebrow="interpretation" title={`What the metrics say about ${gene}`}>
-            <ul className="space-y-2 text-sm">{c.interpretation?.map((l) => <li key={l} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-accent" />{l}</li>)}</ul>
-            <p className="mt-3 text-xs text-warn">{c.disclaimer}</p>
-          </Panel>
+          <Insight label={`What the metrics say about ${gene}`}
+            reason={(num("pli") ?? 0) >= 0.9 || (num("oe_lof_upper") ?? 9) < 0.6
+              ? `${gene} is depleted of loss-of-function variants in the general population – a sign of strong selective constraint.`
+              : `${gene} shows no strong depletion of loss-of-function variants (pLI ${fmtNum(num("pli"), 2)}, LOEUF ${fmtNum(num("oe_lof_upper"), 3)}).`}>
+            <ul className="space-y-1.5">{c.interpretation?.map((l) => <li key={l} className="flex gap-2"><span className="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-accent" /><span>{l}</span></li>)}</ul>
+            <p><b>Important:</b> {c.disclaimer}</p>
+          </Insight>
         </>
       )}
 
@@ -109,9 +112,14 @@ export default function ConstraintObservatory() {
         </div>
       </Panel>
 
-      <Explain title="What each metric means">
-        {Object.values(c.docs ?? {}).map((d) => <p key={d.name}><b className="text-ink">{d.name}.</b> {d.meaning} <i>Caveat: {d.caveat}</i></p>)}
-      </Explain>
+      <Guide title="What each constraint metric means">
+        <GuideItem term={<><Term k="pLI">pLI</Term> – probability of loss-of-function intolerance</>}>A probability from 0 to 1 that the gene cannot tolerate losing <b>one</b> working copy. Values <b>≥ 0.9</b> place a gene in the "LoF-intolerant" class. Example: a pLI of 0.99 means the gene behaves like genes where one broken copy is usually harmful.</GuideItem>
+        <GuideItem term={<><Term k="LOEUF">LOEUF</Term> – LoF observed/expected upper bound</>}>Compares how many <Term k="LoF">loss-of-function</Term> variants are <b>observed</b> in healthy reference people with how many are <b>expected</b> from mutation rates. <b>Lower LOEUF = stronger constraint</b>: damaging variants are missing because natural selection removed them. gnomAD v4 suggests <b>LOEUF &lt; 0.6</b> as constrained.</GuideItem>
+        <GuideItem term={<><Term k="o/e">Observed / expected</Term> with 90% CI</>}>A ratio of 1 means "as many variants as expected". The bar shows the 90% confidence interval; its right end is LOEUF for LoF variants. Small genes have wide intervals because few variants are expected.</GuideItem>
+        <GuideItem term="Missense Z and synonymous o/e"><b>Missense Z</b> above 3.09 indicates fewer missense variants than expected. <b>Synonymous o/e</b> should be near 1 because synonymous changes are mostly neutral – it acts as a calibration check.</GuideItem>
+        <GuideItem term="Why constraint is not a disease prediction">Constraint is a <b>gene-level</b> summary of natural selection in a population sample. A constrained gene can still carry harmless variants, and an unconstrained gene (like HBB) can cause severe <b>recessive</b> disease, because carriers with one working copy are healthy.</GuideItem>
+        <GuideItem term="Where the numbers come from">gnomAD's constraint model for the gene's canonical transcript (v4 for GRCh38 datasets, v2.1.1 for GRCh37 datasets), retrieved from the gnomAD GraphQL API.</GuideItem>
+      </Guide>
     </motion.div>
   );
 }

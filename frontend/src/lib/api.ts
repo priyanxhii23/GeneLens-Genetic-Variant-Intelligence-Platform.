@@ -1,7 +1,9 @@
 /** Thin typed wrapper around the GeneLens FastAPI backend (proxied at /api by Vite). */
 import type {
   AnalysisDetail, AnalysisSummary, Constraint, Dashboard, ExportRecord, Page, PopulationSummary, SourceStatus,
-  Statistics, SyntheticJob, Thresholds, VariantDetail, VariantRow, AnomalyFlag, AnomalySummary,
+  Statistics, SyntheticJob, Thresholds, VariantDetail, VariantRow, AnomalySummary,
+  Annotation, CompareGene, CompareParams, DatasetEntry, FlagItem, GeneSuggestion, Groups, ProvMode,
+  SavedComparison, SourceEntry, WhatIfResult, WhatIfThresholds,
 } from "./types";
 
 export class ApiError extends Error {
@@ -42,13 +44,28 @@ const post = <T>(path: string, body: unknown) => request<T>(path, { method: "POS
 export const api = {
   health: () => request<{ status: string; analyses: number }>("/health"),
   sources: (refresh = false) => request<SourceStatus>(`/sources/status${qs({ refresh })}`),
-  datasets: () => request<{ id: string; label: string; reference_genome: string; clinvar_sources: string[] }[]>("/datasets"),
+  datasets: (refresh = false) => request<DatasetEntry[]>(`/datasets${qs({ refresh })}`),
+  sourceList: (refresh = false) => request<SourceEntry[]>(`/sources${qs({ refresh })}`),
+  refreshSource: (id: string) => request<SourceEntry>(`/sources/${id}/refresh`, { method: "POST" }),
+  suggestGenes: (q: string) => request<{ query: string; results: GeneSuggestion[]; live_search: string | null }>(`/genes/suggest${qs({ q })}`),
+  annotation: (id: number) => request<Annotation>(`/variants/${id}/annotation`),
+  statisticsFor: (analysis_id: string, provenance: ProvMode, include_ambiguous?: boolean) =>
+    request<Groups<Statistics>>(`/analysis/statistics${qs({ analysis_id, provenance, include_ambiguous })}`),
+  populationsFor: (analysis_id: string, provenance: ProvMode) =>
+    request<Groups<PopulationSummary>>(`/analysis/populations${qs({ analysis_id, provenance })}`),
+  compareRun: (p: CompareParams) => post<{ params: CompareParams; genes: CompareGene[]; note: string }>("/compare/run", p),
+  compareWhatIf: (p: CompareParams & { baseline: Partial<WhatIfThresholds>; scenario: Partial<WhatIfThresholds> }) => post<WhatIfResult>("/compare/whatif", p),
+  savedComparisons: () => request<SavedComparison[]>("/compare/saved"),
+  savedComparison: (id: string) => request<SavedComparison>(`/compare/saved/${id}`),
+  saveComparison: (body: { name: string; params: CompareParams; results: unknown; whatif: unknown }) => post<SavedComparison>("/compare/saved", body),
+  deleteComparison: (id: string) => request<void>(`/compare/saved/${id}`, { method: "DELETE" }),
+  comparisonExportUrl: (id: string) => `/api/compare/saved/${id}/export`,
   searchGenes: (q: string) => request<{ results: { ensembl_id: string; symbol: string }[]; error?: string }>(`/genes/search${qs({ q })}`),
   runAnalysis: (body: { gene: string; dataset: string; clinvar_source: string; include_ambiguous?: boolean; anomaly_thresholds?: Partial<Thresholds> }) =>
     post<AnalysisSummary>("/analysis/run", body),
   status: (id: string) => request<AnalysisSummary>(`/analysis/${id}/status`),
   analysis: (id: string) => request<AnalysisDetail>(`/analysis/${id}`),
-  dashboard: (analysis_id?: string | null) => request<Dashboard>(`/dashboard${qs({ analysis_id })}`),
+  dashboard: (analysis_id?: string | null, provenance: ProvMode = "REAL") => request<Dashboard>(`/dashboard${qs({ analysis_id, provenance })}`),
   statistics: (analysis_id: string, include_ambiguous?: boolean) => request<Statistics>(`/analysis/statistics${qs({ analysis_id, include_ambiguous })}`),
   populations: (analysis_id: string) => request<PopulationSummary>(`/analysis/populations${qs({ analysis_id })}`),
   constraint: (analysis_id: string) => request<Constraint>(`/analysis/constraint${qs({ analysis_id })}`),
@@ -56,7 +73,7 @@ export const api = {
   variants: (params: Query) => request<Page<VariantRow>>(`/variants${qs(params)}`),
   variantExportUrl: (params: Query) => `/api/variants/export${qs(params)}`,
   variant: (id: number) => request<VariantDetail>(`/variants/${id}`),
-  anomalies: (params: Query) => request<Page<AnomalyFlag> & { summary: AnomalySummary; thresholds: Thresholds }>(`/anomalies${qs(params)}`),
+  anomalies: (params: Query) => request<Page<FlagItem> & { summary: AnomalySummary; thresholds: Thresholds; counts_by_provenance: Record<string, number> }>(`/anomalies${qs(params)}`),
   detectAnomalies: (analysis_id: string, thresholds: Thresholds) => post<{ run_id: string; summary: AnomalySummary; thresholds: Thresholds }>("/anomalies/detect", { analysis_id, thresholds }),
   generateSynthetic: (body: Record<string, unknown>) => post<SyntheticJob>("/synthetic/generate", body),
   syntheticJobs: (source_analysis_id?: string) => request<{ id: string; n_records: number; seed: number; created_at: string; model_source: string; source_analysis_id: string | null }[]>(`/synthetic${qs({ source_analysis_id })}`),

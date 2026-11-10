@@ -52,6 +52,7 @@ export interface AnomalyFlag {
   id?: number; variant_id: number | null; variant_key: string; provenance: Provenance; category: string;
   kind: "data_quality" | "biological_interest" | "statistical_outlier"; priority: "high" | "medium" | "low";
   score: number; evidence: Record<string, unknown>; explanation: string;
+  headline?: string | null; reason?: string | null; why_it_matters?: string | null; recommendation?: string | null;
 }
 export interface Thresholds {
   pathogenic_af: number; pathogenic_popmax_af: number; ba1_af: number; rare_benign_af: number;
@@ -70,8 +71,16 @@ export interface Constraint {
   docs?: Record<string, { name: string; meaning: string; caveat: string }>; gene?: GeneInfo;
 }
 export interface GeneInfo { gene_id: string; symbol: string; name: string; chrom: string; start: number; stop: number; strand: string; canonical_transcript_id: string }
-export interface Matching { gnomad_records: number; clinvar_records: number; clinvar_with_allele_coordinates: number; status_counts: Record<string, number>; matched_variants: number; clinvar_match_rate: number | null; gnomad_annotated_rate: number | null }
+export interface Matching { frequency_source?: string | null; gnomad_records: number; clinvar_records: number; clinvar_with_allele_coordinates: number; status_counts: Record<string, number>; matched_variants: number; clinvar_match_rate: number | null; gnomad_annotated_rate: number | null }
+export interface GeneAnnotation {
+  genome: string; name?: string; cytoband?: string; note?: string; coordinates_agree_within_bp?: number | null;
+  sources: Record<string, { chrom: string; start: number; end: number; ensembl_id?: string; biotype?: string;
+    canonical_transcript?: string; transcripts?: { name: string; strand: string; tx_start: number; tx_end: number; exons: number }[] }>;
+  ensembl_error?: string; ucsc_error?: string;
+}
 export interface Results {
+  dataset?: { id: string; name: string; provider: string; assembly: string; data_type: string; frequency_source: string | null };
+  gene_annotation?: GeneAnnotation;
   gene: GeneInfo; matching: Matching; statistics: Statistics; anomaly_summary: AnomalySummary; anomaly_thresholds: Thresholds;
   populations: PopulationSummary; constraint: Constraint;
   interpretation: { findings: string[]; limitations: string[]; disclaimer: string };
@@ -94,5 +103,62 @@ export interface Dashboard {
   recent: AnalysisSummary[];
   database: { real_records: number; synthetic_records: number; analyses: number; synthetic_jobs: number };
   analysis?: AnalysisSummary; datasets?: DatasetMeta[]; gene?: GeneInfo; matching?: Matching; anomaly_summary?: AnomalySummary;
+  provenance?: ProvMode;
+  groups?: Partial<Record<"REAL" | "SYNTHETIC", { total_records: number; gnomad_variants: number; clinvar_records: number; matched: number; pathogenic: number; benign: number; vus: number; conflicting: number; flagged: number; by_match_status: Record<string, number>; by_class: Record<string, number> }>>;
   metrics?: { total_records: number; gnomad_variants: number; clinvar_records: number; matched: number; pathogenic: number; benign: number; vus: number; conflicting: number; flagged: number; real: number; synthetic_linked: number; by_match_status: Record<string, number>; by_class: Record<string, number> };
 }
+
+// ---------------------------------------------------------------- upgrade types
+export type ProvMode = "REAL" | "SYNTHETIC" | "BOTH";
+export interface Groups<T> { mode: ProvMode; groups: Partial<Record<"REAL" | "SYNTHETIC", T | null>> }
+
+export interface DatasetEntry {
+  id: string; name: string; provider: string; assembly: string; release: string;
+  data_type: "population_frequency" | "clinical_annotation" | "variant_catalogue";
+  kind: string; source_ids: string[]; description: string; clinvar_sources: string[];
+  status: "available" | "unavailable"; status_detail: string;
+}
+export interface SourceEntry {
+  id: string; name: string; provider: string; method: string; endpoint: string; category: string;
+  provides: string[]; used_for: string; homepage: string; available: boolean | null; detail: string | null;
+  release: string | null; latency_ms: number | null; last_checked_at: string | null; last_success_at: string | null;
+  last_retrieval_at: string | null; records_retrieved: number; last_error: string | null; last_error_at: string | null;
+}
+export interface GeneSuggestion {
+  symbol: string; name: string | null; chrom: string | null; description: string | null; starter: boolean;
+  analysed: number; offline_snapshot: boolean; data_status: string; compatible_datasets: string[];
+  in_catalogue: boolean; ensembl_id?: string;
+}
+export interface FlagItem extends AnomalyFlag {
+  clinical_significance: string | null; coarse_class: CoarseClass | null; af: number | null;
+  hgvsp: string | null; hgvsc: string | null;
+}
+export interface Annotation {
+  variant_key: string; genome: string;
+  vep?: { most_severe_consequence: string; transcript: string; gene: string; consequences: string[]; impact: string;
+          amino_acids: string | null; protein_position: number | null; sift: string | null; polyphen: string | null;
+          colocated: string[]; n_transcripts: number };
+  vep_error?: string;
+  dbsnp?: { rsid: string; variant_type: string; created: string; updated: string; build: string;
+            frequencies: { study: string; allele: string; ref: string; allele_count: number; total_count: number; af: number }[];
+            clinvar_rcv: string[]; merged_rsids: string[] };
+  dbsnp_error?: string;
+}
+export interface CompareGene {
+  gene: string; status: "ok" | "missing"; message?: string; analysis_id?: string; completed_at?: string; sources?: string[];
+  frequency_records?: number; clinvar_records?: number; matched?: number;
+  class_counts?: Record<string, number>; selected_with_af?: number; above_threshold?: number;
+  above_threshold_by_class?: Record<string, number>; median_af?: number | null;
+  histogram?: { edges: number[]; counts: Record<string, number[]> }; pli?: number | null; loeuf?: number | null; mis_z?: number | null;
+}
+export interface CompareParams { genes: string[]; dataset: string; af_threshold: number; classes: string[]; min_stars: number; populations: string[] }
+export interface WhatIfThresholds { pathogenic_af: number; pathogenic_popmax_af: number; ba1_af: number; rare_benign_af: number }
+export interface WhatIfResult {
+  baseline_thresholds: WhatIfThresholds; scenario_thresholds: WhatIfThresholds; explanation: string;
+  total: { baseline: number; scenario: number; difference: number; percent_change: number | null };
+  genes: { gene: string; status: string; baseline?: { total: number; by_category: Record<string, number> };
+           scenario?: { total: number; by_category: Record<string, number> }; difference?: number;
+           percent_change?: number | null; by_category_difference?: Record<string, number> }[];
+}
+export interface SavedComparison { id: string; name: string; genes: string[]; dataset: string; parameters: CompareParams; created_at: string;
+  results?: { run: { genes: CompareGene[] } | null; whatif: WhatIfResult | null } }

@@ -6,6 +6,7 @@
    GeneLens design tokens (RGB triplets so Tailwind can apply alpha).
    Classification colours were validated for colour-vision deficiency
    with the dataviz palette validator (light + dark surfaces).
+   gold = REAL-data identification · pink = SYNTHETIC-data identification
 ------------------------------------------------------------------- */
 :root,
 :root[data-theme="light"] {
@@ -15,8 +16,8 @@
   --raised: 251 248 241;
   --line: 228 221 206;
   --ink: 11 27 51;          /* deep navy */
-  --muted: 74 90 116;
-  --faint: 135 146 166;
+  --muted: 66 82 108;
+  --faint: 128 139 160;
   --accent: 15 139 141;     /* teal */
   --accent2: 59 110 165;    /* muted blue */
   --violet: 109 79 196;
@@ -28,6 +29,8 @@
   --good: 22 128 61;
   --warn: 180 83 9;
   --bad: 190 18 60;
+  --gold: 176 132 26;
+  --pink: 207 64 139;
   --grid: 15 23 42;
 }
 
@@ -37,9 +40,9 @@
   --surface: 12 19 34;
   --raised: 17 26 46;
   --line: 30 42 68;
-  --ink: 230 237 247;
-  --muted: 147 163 189;
-  --faint: 91 107 134;
+  --ink: 232 238 247;
+  --muted: 156 171 196;
+  --faint: 98 114 141;
   --accent: 34 211 238;     /* cyan */
   --accent2: 20 184 166;    /* teal */
   --violet: 139 92 246;
@@ -51,58 +54,94 @@
   --good: 52 211 153;
   --warn: 251 191 36;
   --bad: 251 113 133;
+  --gold: 226 184 82;
+  --pink: 240 120 182;
   --grid: 148 163 184;
 }
 
 html { background: rgb(var(--bg)); }
 body {
   @apply bg-bg text-ink font-sans antialiased;
+  font-size: 15.5px;
+  line-height: 1.6;
+  font-feature-settings: "ss01", "cv11";
   transition: background-color 0.45s ease, color 0.45s ease;
 }
 * { border-color: rgb(var(--line)); }
 /* Let grid tracks shrink below their content (wide tables scroll inside their panel instead). */
 .grid > * { min-width: 0; }
 ::selection { background: rgb(var(--accent) / 0.25); }
+h1, h2, h3 { font-family: "DM Serif Display", Georgia, serif; font-weight: 400; letter-spacing: -0.01em; }
 
 @layer components {
   .panel {
-    @apply rounded-2xl border border-line bg-surface/80 backdrop-blur-sm;
-    transition: background-color 0.45s ease, border-color 0.45s ease;
+    @apply relative rounded-2xl border border-line bg-surface/85 backdrop-blur-sm;
+    transition: background-color 0.45s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
   }
-  :root[data-theme="light"] .panel { @apply shadow-soft; }
-  .eyebrow { @apply font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint; }
+  /* dimensional surface: hairline highlight on top edge */
+  .panel::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.05), transparent 40%);
+  }
+  :root[data-theme="light"] .panel { box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 10px 30px -18px rgb(15 23 42 / 0.18); }
+  :root[data-theme="dark"] .panel { box-shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 18px 40px -26px rgb(0 0 0 / 0.8); }
+  .panel-interactive:hover { @apply border-accent/40; transform: translateY(-2px); }
+
+  .eyebrow { @apply font-mono text-[11.5px] uppercase tracking-[0.16em] text-faint; }
+  .page-title { @apply font-display text-[clamp(2.3rem,3.3vw,2.85rem)] leading-[1.08]; }
+  .section-title { @apply font-display text-[24px] leading-tight; }
+  .card-title { @apply font-display text-[20px] leading-snug; }
+  .meta { @apply text-[12.5px] text-faint; }
+
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-[14.5px] font-semibold
            transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60
            disabled:cursor-not-allowed disabled:opacity-50;
   }
-  .btn-primary { @apply btn bg-accent text-bg hover:shadow-glow hover:-translate-y-px; }
+  .btn-primary { @apply btn bg-accent text-bg hover:shadow-glow hover:-translate-y-px active:translate-y-0; }
   .btn-ghost { @apply btn border border-line bg-raised/60 text-ink hover:border-accent/50 hover:text-accent; }
   .input {
-    @apply w-full rounded-xl border border-line bg-raised/70 px-3 py-2 text-sm text-ink placeholder:text-faint
-           focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/20;
+    @apply w-full rounded-xl border border-line bg-raised/70 px-3 py-2 text-[14.5px] text-ink placeholder:text-faint
+           transition-shadow focus:border-accent/60 focus:outline-none focus:shadow-glow-sm;
   }
-  .chip { @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-semibold; }
   .data { @apply font-mono tabular-nums; }
-  .table-head { @apply eyebrow sticky top-0 z-10 bg-surface px-3 py-2 text-left font-normal; }
-  .table-cell { @apply border-t border-line/70 px-3 py-2 text-sm; }
+  .table-head { @apply eyebrow sticky top-0 z-10 bg-surface px-3 py-2.5 text-left font-normal; }
+  .table-cell { @apply border-t border-line/70 px-3 py-2.5 text-[14px]; }
+
+  /* ---- explanation typography (Part 4) ---- */
+  .insight-reason { @apply text-[18px] font-semibold leading-[1.5] text-ink; }
+  .insight-detail { @apply text-[15.5px] leading-[1.75] text-muted; }
+  .insight-detail b, .insight-detail strong, .guide b, .guide strong { @apply font-semibold text-ink; }
+  .guide { @apply text-[15.5px] leading-[1.75] text-muted; }
+  .guide p + p { @apply mt-3; }
+  .term { @apply cursor-help underline decoration-dotted decoration-1 underline-offset-[3px]; }
 }
 
-/* Synthetic data is always visually distinct: diagonal hatch. */
-.synthetic-hatch {
-  background-image: repeating-linear-gradient(135deg, rgb(var(--violet) / 0.16) 0 6px, transparent 6px 12px);
-}
+/* ---- Real / synthetic identification (Part 3) ---- */
+/* BOTH mode: thin outline glow per row. No fills, no stripes. */
+table.prov-both { border-collapse: separate; border-spacing: 0 6px; }
+table.prov-both td { border-top: 0; }
+tr.prov-real { outline: 1px solid rgb(var(--gold) / 0.6); outline-offset: -1px; box-shadow: 0 0 14px -5px rgb(var(--gold) / 0.55); border-radius: 10px; }
+tr.prov-synthetic { outline: 1px solid rgb(var(--pink) / 0.6); outline-offset: -1px; box-shadow: 0 0 14px -5px rgb(var(--pink) / 0.55); border-radius: 10px; }
+/* SYNTHETIC-only mode: subtle pink accent around the identifier */
+.syn-id { @apply rounded-md bg-pink/[0.06] px-1.5 py-0.5 ring-1 ring-pink/70; box-shadow: 0 0 12px -4px rgb(var(--pink) / 0.75); }
 
 /* Fine grid used behind the workspace */
 .lab-grid {
   background-image:
+    radial-gradient(1200px 600px at 85% -10%, rgb(var(--accent) / 0.06), transparent 60%),
     linear-gradient(rgb(var(--grid) / 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgb(var(--grid) / 0.05) 1px, transparent 1px);
-  background-size: 32px 32px;
+  background-size: auto, 32px 32px, 32px 32px;
 }
 
 .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 8px; }
+
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+@keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgb(var(--bad) / 0.45); } 100% { box-shadow: 0 0 0 8px rgb(var(--bad) / 0); } }
+.pulse-high { animation: pulse-ring 1.8s ease-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }

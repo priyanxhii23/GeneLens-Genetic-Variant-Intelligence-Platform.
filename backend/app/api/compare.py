@@ -79,7 +79,9 @@ def compare_run(p: CompareParams, db: Session = Depends(get_db)):
                         "message": f"No completed {DATASET_BY_ID[p.dataset].name} analysis for {g} yet."})
             continue
         rows = cmp.effective_rows(load_rows(db, a.id), p.populations, p.min_stars)
-        sources = sorted({d.source for d in db.scalars(select(DatasetMetadata).where(DatasetMetadata.analysis_id == a.id))})
+        # Real data sources only – the comparison never uses synthetic records.
+        sources = sorted({d.source for d in db.scalars(select(DatasetMetadata).where(DatasetMetadata.analysis_id == a.id))
+                          if d.source != "Synthetic"})
         out.append({"gene": g, "status": "ok", "analysis_id": a.id, "completed_at": a.completed_at,
                     "sources": sources, **cmp.gene_metrics(rows, a.results or {}, p.classes, p.af_threshold)})
     return json_safe({"params": p.model_dump(), "genes": out,

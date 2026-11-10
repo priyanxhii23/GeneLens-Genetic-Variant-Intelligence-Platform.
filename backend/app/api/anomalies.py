@@ -48,7 +48,7 @@ def list_anomalies(analysis_id: str, kind: str | None = None, category: str | No
     ids = [r.variant_id for r in rows if r.variant_id]
     variants = {v.id: v for v in db.scalars(select(Variant).where(Variant.id.in_(ids)))} if ids else {}
     return {"total": total, "page": page, "page_size": page_size,
-            "summary": (a.results or {}).get("anomaly_summary"), "thresholds": (a.results or {}).get("anomaly_thresholds"),
+            "summary": _summary(db, analysis_id, provenance), "thresholds": (a.results or {}).get("anomaly_thresholds"),
             "counts_by_provenance": dict(db.execute(select(AnomalyResult.provenance, func.count()).where(
                 AnomalyResult.analysis_id == analysis_id).group_by(AnomalyResult.provenance)).all()),
             "items": [_item(r, variants.get(r.variant_id)) for r in rows]}
@@ -62,3 +62,16 @@ def _item(r: AnomalyResult, v: Variant | None) -> dict:
             "clinical_significance": v.clinical_significance if v else None,
             "coarse_class": v.coarse_class if v else None, "af": v.af if v else None,
             "hgvsp": v.hgvsp if v else None, "hgvsc": v.hgvsc if v else None}
+
+
+def _summary(db: Session, analysis_id: str, provenance: str) -> dict:
+    """Flag counts for the selected provenance, computed from stored flags."""
+    cond = [AnomalyResult.analysis_id == analysis_id]
+    if provenance != "BOTH":
+        cond.append(AnomalyResult.provenance == provenance)
+    out = {"total": db.scalar(select(func.count()).select_from(AnomalyResult).where(*cond)) or 0,
+           "flagged_variants": db.scalar(select(func.count(func.distinct(AnomalyResult.variant_key))).where(*cond)) or 0}
+    for key, col in (("by_category", AnomalyResult.category), ("by_kind", AnomalyResult.kind),
+                     ("by_priority", AnomalyResult.priority)):
+        out[key] = dict(db.execute(select(col, func.count()).where(*cond).group_by(col)).all())
+    return out

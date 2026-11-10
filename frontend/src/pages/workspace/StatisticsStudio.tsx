@@ -2,11 +2,12 @@ import { motion } from "framer-motion";
 import { CheckCircle2, CircleSlash, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import Plot from "../../components/Plot";
-import { ClassBadge, ErrorState, Explain, HelixLoader, NeedsAnalysis, PageHeader, Panel, stagger, Tabs } from "../../components/ui";
+import { ClassBadge, ErrorState, Guide, GuideItem, HelixLoader, Insight, NeedsAnalysis, PageHeader, Panel, stagger, Tabs, Term } from "../../components/ui";
+import { useProvenance } from "../../lib/provenance";
 import { api } from "../../lib/api";
 import { useAnalysis, useFetch } from "../../lib/analysis";
 import { CLASS_META, fmtAF, fmtInt, fmtNum, fmtP, MAIN_CLASSES, pct, token } from "../../lib/format";
-import type { StatTest } from "../../lib/types";
+import type { StatTest, Statistics } from "../../lib/types";
 
 function Contingency({ t }: { t: { rows: string[]; columns: string[]; counts: number[][] } }) {
   return (
@@ -48,7 +49,7 @@ function TestCard({ t }: { t: StatTest }) {
           )}
           {t.warning && <p className="mt-2 text-xs text-warn">{t.warning}</p>}
           {(t.contingency_table || t.table) && <Contingency t={(t.contingency_table ?? t.table)!} />}
-          <p className="mt-3 text-sm leading-relaxed text-muted">{t.explanation}</p>
+          <p className="insight-detail mt-3">{t.explanation}</p>
           {t.assumptions && (
             <details className="mt-2 text-xs"><summary className="cursor-pointer text-faint">assumption checks</summary>
               <pre className="mt-2 overflow-x-auto rounded-lg bg-bg/60 p-3 font-mono text-[11px] text-muted scrollbar-thin">{JSON.stringify(t.assumptions, (_, v) => (typeof v === "number" ? Number(v.toPrecision(4)) : v), 2)}</pre></details>
@@ -61,62 +62,82 @@ function TestCard({ t }: { t: StatTest }) {
 
 export default function StatisticsStudio() {
   const { analysisId, detail } = useAnalysis();
+  const { mode } = useProvenance();
   const [amb, setAmb] = useState<"no" | "yes">("no");
-  const stats = useFetch(analysisId && detail?.results ? () => api.statistics(analysisId, amb === "yes") : null, [analysisId, amb, detail?.results]);
-  const s = stats.data;
+  const [grp, setGrp] = useState<"REAL" | "SYNTHETIC">("REAL");
+  const stats = useFetch(analysisId && detail?.results ? () => api.statisticsFor(analysisId, mode, amb === "yes") : null, [analysisId, amb, detail?.results, mode]);
+  const groups = Object.entries(stats.data?.groups ?? {}).filter(([, v]) => v) as ["REAL" | "SYNTHETIC", Statistics][];
+  const active = mode === "BOTH" ? grp : (mode as "REAL" | "SYNTHETIC");
+  const s = stats.data?.groups[active] ?? null;
 
-  const ecdf = useMemo(() => s ? MAIN_CLASSES.filter((c) => s.box_data[c]?.length).map((c) => {
-    const v = s.box_data[c].map((x) => Math.log10(x)).sort((a, b) => a - b);
-    return { type: "scatter" as const, mode: "lines" as const, name: `${CLASS_META[c].short} (n=${v.length})`, x: v, y: v.map((_, i) => (i + 1) / v.length),
-      line: { color: token(CLASS_META[c].color), width: 2, shape: "hv" as const }, hovertemplate: "log10 AF ≤ %{x:.2f}: %{y:.0%}<extra>%{fullData.name}</extra>" };
-  }) : [], [s]);
+  const ecdf = useMemo(() => groups.flatMap(([g, st]) => MAIN_CLASSES.filter((c) => st.box_data[c]?.length).map((c) => {
+    const v = st.box_data[c].map((x) => Math.log10(x)).sort((a, b) => a - b);
+    return { type: "scatter" as const, mode: "lines" as const, name: `${CLASS_META[c].short}${g === "SYNTHETIC" ? " (syn)" : ""} n=${v.length}`, x: v, y: v.map((_, i) => (i + 1) / v.length),
+      line: { color: token(CLASS_META[c].color), width: 2, shape: "hv" as const, dash: g === "SYNTHETIC" ? "dash" as const : "solid" as const },
+      hovertemplate: `log10 AF ≤ %{x:.2f}: %{y:.0%}<extra>${g} ${CLASS_META[c].short}</extra>` };
+  })), [stats.data]); // eslint-disable-line
 
   if (!analysisId) return <NeedsAnalysis />;
   const prop = s?.proportions.pathogenic_fraction_of_clinvar;
+  const key = s?.tests.find((t) => t.ran && t.comparison === "P/LP vs B/LB");
+  const nSig = s?.tests.filter((t) => t["significant_fdr_0.05"]).length ?? 0;
+  const nRan = s?.tests.filter((t) => t.ran).length ?? 0;
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
       <PageHeader index="07" title="Statistical Analysis Studio"
-        subtitle="Descriptive statistics, non-parametric group comparisons, contingency tests and correlation – with assumption checks, effect sizes, confidence intervals and multiple-testing correction, all computed by SciPy on the stored real records."
-        actions={<Tabs value={amb} onChange={setAmb} options={[{ value: "no", label: "Exact + normalized" }, { value: "yes", label: "+ ambiguous" }]} />} />
+        subtitle="Descriptive statistics, non-parametric group comparisons, contingency tests and correlation – with assumption checks, effect sizes, confidence intervals and multiple-testing correction, computed by SciPy from the stored records."
+        actions={<div className="flex flex-wrap gap-2">
+          {mode === "BOTH" && <Tabs value={grp} onChange={setGrp} options={[{ value: "REAL", label: <><span className="h-2 w-2 rounded-full bg-gold" />Real tests</> }, { value: "SYNTHETIC", label: <><span className="h-2 w-2 rounded-full bg-pink" />Synthetic tests</> }]} />}
+          <Tabs value={amb} onChange={setAmb} options={[{ value: "no", label: "Exact + normalized" }, { value: "yes", label: "+ ambiguous" }]} />
+        </div>} />
       {stats.loading && <HelixLoader label="Computing statistics" />}
       {stats.error && <ErrorState message={stats.error} onRetry={stats.reload} />}
+      {mode !== "REAL" && !stats.loading && !stats.data?.groups.SYNTHETIC && (
+        <Insight tone="pink" label="No synthetic data" reason="This analysis has no linked synthetic records yet."><p>Generate a dataset in the Synthetic Lab to compute synthetic statistics. Real and synthetic statistics are always computed separately.</p></Insight>
+      )}
       {s && (
         <>
+          <Insight label={`Main finding · ${active.toLowerCase()} data`}
+            reason={key ? `Pathogenic and benign variants ${key["significant_fdr_0.05"] ? "differ" : "do not differ"} significantly in allele frequency (Mann–Whitney p = ${fmtP(key.p_adjusted_bh)} after FDR correction; effect size ${fmtNum(key.effect_size?.value ?? null)}, ${key.effect_size?.magnitude}).`
+              : "The key P/LP vs B/LB comparison could not run – each group needs at least five matched variants with a frequency."}>
+            <p>{nSig} of {nRan} tests that ran were significant after <b>Benjamini–Hochberg FDR correction</b>. A significant <Term k="p-value">p-value</Term> says a difference is unlikely to be chance; the <Term k="effect size">effect size</Term> says how big it is. With thousands of variants even tiny effects become significant, so read both. Variants in a gene are not fully independent and frequency is part of how classifications are made, so treat these as <b>descriptive</b> results.</p>
+          </Insight>
           <div className="grid gap-4 sm:grid-cols-3">
-            {[["Rows considered", s.sample.total_rows], ["Matched variants used", s.sample.matched_used], ["…with gnomAD AF > 0", s.sample.matched_with_af]].map(([l, v]) => (
-              <div key={l as string} className="panel p-4"><div className="eyebrow">{l}</div><div className="data mt-1 text-2xl">{fmtInt(v as number)}</div></div>
+            {[["Rows considered", s.sample.total_rows], ["Matched variants used", s.sample.matched_used], ["…with AF > 0", s.sample.matched_with_af]].map(([l, v]) => (
+              <div key={l as string} className="panel p-4"><div className="eyebrow">{l}</div><div className="data mt-1 text-[28px]">{fmtInt(v as number)}</div></div>
             ))}
           </div>
           <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
             <Panel eyebrow="distribution" title="Cumulative distribution of log10 AF">
-              <Plot data={ecdf} height={320} layout={{ xaxis: { title: { text: "log10(allele frequency)" } }, yaxis: { title: { text: "cumulative share" }, tickformat: ".0%" }, hovermode: "closest" }} />
-              <p className="text-xs text-faint">Curves further right = more frequent variants. Mann–Whitney asks whether one curve sits systematically to the right of another.</p>
+              <Plot data={ecdf} height={340} layout={{ xaxis: { title: { text: "log10(allele frequency)" } }, yaxis: { title: { text: "cumulative share" }, tickformat: ".0%" }, hovermode: "closest" }} />
+              <p className="meta">Curves further right = more frequent variants. Mann–Whitney asks whether one curve sits systematically to the right of another.{mode === "BOTH" ? " Dashed = synthetic." : ""}</p>
             </Panel>
             <Panel eyebrow="descriptive" title="Per-class summary">
-              <table className="w-full text-sm">
+              <table className="w-full text-[14px]">
                 <thead><tr>{["Class", "n", "Median", "Mean", "SD", "IQR"].map((h) => <th key={h} className="table-head !px-2">{h}</th>)}</tr></thead>
                 <tbody>{MAIN_CLASSES.map((c) => { const d = s.descriptive[c]; return (
-                  <tr key={c}><td className="table-cell !px-2"><ClassBadge cls={c} /></td><td className="table-cell data !px-2 text-xs">{fmtInt(d?.n)}</td>
-                    <td className="table-cell data !px-2 text-xs">{fmtAF(d?.median)}</td><td className="table-cell data !px-2 text-xs">{fmtAF(d?.mean)}</td>
-                    <td className="table-cell data !px-2 text-xs">{fmtAF(d?.std)}</td><td className="table-cell data !px-2 text-xs">{fmtAF(d?.iqr)}</td></tr>); })}</tbody>
+                  <tr key={c}><td className="table-cell !px-2"><ClassBadge cls={c} /></td><td className="table-cell data !px-2 text-[13px]">{fmtInt(d?.n)}</td>
+                    <td className="table-cell data !px-2 text-[13px]">{fmtAF(d?.median)}</td><td className="table-cell data !px-2 text-[13px]">{fmtAF(d?.mean)}</td>
+                    <td className="table-cell data !px-2 text-[13px]">{fmtAF(d?.std)}</td><td className="table-cell data !px-2 text-[13px]">{fmtAF(d?.iqr)}</td></tr>); })}</tbody>
               </table>
               {prop?.estimate !== null && prop?.ci95_wilson && (
-                <div className="mt-4 rounded-xl bg-raised/60 p-3 text-sm">
-                  P/LP share of ClinVar records: <span className="data">{pct(prop.estimate)}</span> <span className="text-xs text-muted">(95% Wilson CI {pct(prop.ci95_wilson[0])}–{pct(prop.ci95_wilson[1])}, n = {fmtInt(prop.n)})</span>
+                <div className="mt-4 rounded-xl bg-raised/60 p-3 text-[14px]">
+                  P/LP share of ClinVar records: <span className="data">{pct(prop.estimate)}</span> <span className="text-[12.5px] text-muted">(95% Wilson CI {pct(prop.ci95_wilson[0])}–{pct(prop.ci95_wilson[1])}, n = {fmtInt(prop.n)})</span>
                 </div>
               )}
             </Panel>
           </div>
-          <div className="rounded-xl border border-accent/30 bg-accent/5 px-4 py-3 text-sm text-muted"><b className="text-ink">{s.multiple_testing.method}</b> across {s.multiple_testing.m} tests. {s.multiple_testing.explanation}</div>
-          <motion.div variants={stagger} className="grid gap-4 lg:grid-cols-2">{s.tests.map((t, i) => <TestCard key={i} t={t} />)}</motion.div>
-          <Explain title="Beginner's guide to these statistics">
-            <p><b>p-value:</b> how surprising the observed difference would be if there were truly no difference. It is not the probability that the finding is true.</p>
-            <p><b>Effect size:</b> how big the difference is. With thousands of variants even tiny effects become “significant”, so always read the effect size.</p>
-            <p><b>Confidence interval:</b> a range of values compatible with the data at the 95% level.</p>
-            <p><b>Why non-parametric tests?</b> Allele frequencies are heavily skewed (Shapiro–Wilk results are in each card's assumption checks), so rank-based tests are used.</p>
-            <p><b>Independence caveat:</b> variants in one gene are not fully independent observations, and frequency is part of how classifications are assigned. Treat results as descriptive of this dataset.</p>
-          </Explain>
+          <div className="rounded-xl border border-accent/30 bg-accent/5 px-4 py-3 text-[14.5px] text-muted"><b className="text-ink">{s.multiple_testing.method}</b> across {s.multiple_testing.m} tests. {s.multiple_testing.explanation}</div>
+          <motion.div variants={stagger} className="grid gap-4 lg:grid-cols-2">{s.tests.map((t, i) => <TestCard key={`${active}-${i}`} t={t} />)}</motion.div>
+          <Guide title="Beginner's guide to these statistics">
+            <GuideItem term={<Term k="p-value">p-value</Term>}>How surprising the observed difference would be if there were truly no difference. <b>p = 0.01</b> means such a difference would appear by chance about 1 time in 100. It is <b>not</b> the probability that the finding is true.</GuideItem>
+            <GuideItem term={<Term k="FDR">Adjusted p-value (BH-FDR)</Term>}>Running several tests raises the chance that one looks significant by luck. The Benjamini–Hochberg adjustment corrects for this; GeneLens calls a result significant only if the <b>adjusted</b> value is below 0.05.</GuideItem>
+            <GuideItem term={<Term k="effect size">Effect size</Term>}>How big a difference is. <Term k="rank-biserial">Rank-biserial r</Term> runs from −1 to 1 (0 = no difference); Cramér's V from 0 to 1; the odds ratio is 1 when there is no association.</GuideItem>
+            <GuideItem term="Confidence interval (CI)">A range of values compatible with the data at the 95% level. Example: a CI for the median difference of −0.4 to 0.2 includes 0, so "no difference" is plausible.</GuideItem>
+            <GuideItem term="Why non-parametric tests?">Allele frequencies are extremely skewed (most are tiny, a few are large), which breaks t-tests. Rank-based tests like Mann–Whitney compare orderings instead of averages. Normality checks are shown under each test's <b>assumption checks</b>.</GuideItem>
+            <GuideItem term="What not to conclude">These tests describe this gene's data. They do not show that frequency causes a classification, nor that any individual variant is misclassified.</GuideItem>
+          </Guide>
         </>
       )}
     </motion.div>
