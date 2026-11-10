@@ -10,10 +10,35 @@
 
 ## Table of contents
 **Part A – Getting started (Windows + VS Code)**
-1. [Extract the ZIP](#1-extract-the-zip) · 2. [Open it in VS Code](#2-open-it-in-vs-code) · 3. [Virtual environment](#3-create-the-python-virtual-environment) · 4. [Backend dependencies](#4-install-backend-dependencies) · 5. [Frontend dependencies](#5-install-frontend-dependencies) · 6. [Environment variables](#6-configure-environment-variables-backendenv) · 7. [Database](#7-initialise-the-database) · 8. [Run the backend](#8-run-the-backend-terminal-1) · 9. [Run the frontend](#9-run-the-frontend-terminal-2) · 10. [Open the app](#10-open-the-application) · 11. [Troubleshooting](#11-troubleshooting) · 12. [Datasets](#12-configure-and-retrieve-datasets) · 13. [Tests](#13-run-the-tests)
+
+1. [Extract the ZIP](#1-extract-the-zip) · 
+2. [Open it in VS Code](#2-open-it-in-vs-code) ·
+3. [Virtual environment](#3-create-the-python-virtual-environment) · 
+4. [Backend dependencies](#4-install-backend-dependencies) ·
+5. [Frontend dependencies](#5-install-frontend-dependencies) ·
+6. [Environment variables](#6-configure-environment-variables-backendenv) ·
+7. [Database](#7-initialise-the-database) ·
+8. [Run the backend](#8-run-the-backend-terminal-1) ·
+9. [Run the frontend](#9-run-the-frontend-terminal-2) ·
+10. [Open the app](#10-open-the-application) ·
+11. [Troubleshooting](#11-troubleshooting) ·
+12. [Datasets](#12-configure-and-retrieve-datasets) ·
+13. [Tests](#13-run-the-tests)
 
 **Part B – The project**
-14. [Research problem & objectives](#14-research-problem--objectives) · 15. [Features](#15-features--twelve-modules) · 16. [Data ecosystem](#16-data-ecosystem--10-datasets-7-sources-custom-data) · 17. [Technology stack](#17-technology-stack) · 18. [Architecture](#18-architecture) · 19. [Statistical methodology](#19-statistical-methodology) · 20. [Synthetic data methodology](#20-synthetic-data-methodology) · 21. [Screenshots](#21-screenshots) · 22. [API](#22-api-documentation) · 23. [Performance](#23-performance) · 24. [Limitations](#24-limitations) · 25. [Future work](#25-future-enhancements) · 26. [References](#26-references-and-data-attribution)
+
+14. [Research problem & objectives](#14-research-problem--objectives) ·
+15. [Features](#15-features--twelve-modules) ·
+16. [Data ecosystem](#16-data-ecosystem--10-datasets-7-sources-custom-data) ·
+17. [Technology stack](#17-technology-stack) ·
+18. [Architecture](#18-architecture) ·
+19. [Statistical methodology](#19-statistical-methodology) ·
+20. [Synthetic data methodology](#20-synthetic-data-methodology) ·
+21. [Screenshots](#21-screenshots) ·
+22. [API](#22-api-documentation) ·
+23. [Performance](#23-performance) ·
+24. [Future work](#25-future-enhancements) ·
+25. [References](#26-references-and-data-attribution)
 
 ---
 
@@ -360,19 +385,11 @@ Interactive docs: **http://localhost:8000/docs**. Main endpoints:
 ## 23. Performance
 Measured before/after numbers (cold vs cached navigation, gene suggestions, filtering, analysis runtimes) and the optimisations behind them are in [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md).
 
-## 24. Limitations
-* ClinVar classifications are submitted assertions, not ground truth; frequency is itself ACMG/AMP evidence, so frequency–classification associations are partly circular.
-* Reference datasets (gnomAD, 1000 Genomes) under-represent many ancestries and are not disease-free.
-* Matching relies on both sources being left-aligned (no reference FASTA); haplotypes, large CNVs and IUPAC-ambiguous alleles are reported as unmatchable.
-* 1000 Genomes population AC is derived as AF × AN (phase 3 genotypes are complete); dbSNP allele numbers are derived from study count ÷ frequency – both are flagged on every record.
-* dbSNP retrieval is capped at 25,000 RefSNPs per gene; very large genes take minutes without an NCBI API key.
-* Third-party APIs can rate-limit or change; GeneLens reports this honestly in the Source Manager. All connectors were tested live on 2026-11-10.
-* Synthetic data reproduces marginal distributions only, not linkage or function.
 
-## 25. Future enhancements
+## 24. Future enhancements
 Reference-FASTA left-alignment; regional missense constraint; per-submission (SCV) ClinVar conflict analysis; Docker Compose with PostgreSQL and a job queue; Playwright tests in CI.
 
-## 26. References and data attribution
+## 25. References and data attribution
 * Chen S, et al. *A genomic mutational constraint map using variation in 76,156 human genomes.* Nature 625, 92–100 (2024).
 * Karczewski KJ, et al. *The mutational constraint spectrum quantified from variation in 141,456 humans.* Nature 581, 434–443 (2020).
 * Landrum MJ, et al. *ClinVar: improvements to accessing data.* Nucleic Acids Res 48, D835–D844 (2020).
