@@ -46,7 +46,7 @@ export default function VariantExplorer() {
   const [pageSize, setPageSize] = useState(50);
   const [open, setOpen] = useState<number | null>(null);
 
-  useEffect(() => { const t = setTimeout(() => setQ(search), 350); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { const t = setTimeout(() => setQ(search), 200); return () => clearTimeout(t); }, [search]);
   useEffect(() => setPage(1), [q, classes, match, prov, minAf, maxAf, flagged, pageSize, topPop]);
 
   const params = useMemo(() => ({
