@@ -5,7 +5,7 @@ import Plot from "../../components/Plot";
 import { ErrorState, Guide, GuideItem, HelixLoader, Insight, NeedsAnalysis, PageHeader, Panel, stagger, Term } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAnalysis, useFetch } from "../../lib/analysis";
-import { fmtNum, token } from "../../lib/format";
+import { fmtInt, fmtNum, token } from "../../lib/format";
 
 function Scale({ label, value, min, max, threshold, lowGood, hint }: { label: string; value: number | null | undefined; min: number; max: number; threshold: number; lowGood?: boolean; hint: string }) {
   const pos = value === null || value === undefined ? null : Math.min(1, Math.max(0, (value - min) / (max - min)));
@@ -24,6 +24,28 @@ function Scale({ label, value, min, max, threshold, lowGood, hint }: { label: st
     </div>
   );
 }
+
+const CONSTRAINT_ROWS: [string, string, string][] = [
+  ["pli", "pLI", "Probability of being loss-of-function intolerant"],
+  ["oe_lof", "LoF o/e", "Observed / expected loss-of-function variants"],
+  ["oe_lof_lower", "LoF o/e lower 90% bound", "Lower confidence bound"],
+  ["oe_lof_upper", "LOEUF", "Upper 90% bound of LoF o/e (lower = more constrained)"],
+  ["lof_z", "LoF Z", "Depletion of LoF variants as a Z-score"],
+  ["obs_lof", "Observed LoF", "Count of observed LoF variants"],
+  ["exp_lof", "Expected LoF", "Expected count under the mutational model"],
+  ["oe_mis", "Missense o/e", "Observed / expected missense variants"],
+  ["oe_mis_lower", "Missense o/e lower", "Lower 90% bound"],
+  ["oe_mis_upper", "Missense o/e upper", "Upper 90% bound"],
+  ["mis_z", "Missense Z", "Depletion of missense variants as a Z-score"],
+  ["obs_mis", "Observed missense", "Count of observed missense variants"],
+  ["exp_mis", "Expected missense", "Expected missense count"],
+  ["oe_syn", "Synonymous o/e", "Should be close to 1 (model calibration check)"],
+  ["oe_syn_lower", "Synonymous o/e lower", "Lower 90% bound"],
+  ["oe_syn_upper", "Synonymous o/e upper", "Upper 90% bound"],
+  ["syn_z", "Synonymous Z", "Large |Z| suggests a model/coverage issue"],
+  ["obs_syn", "Observed synonymous", "Count of observed synonymous variants"],
+  ["exp_syn", "Expected synonymous", "Expected synonymous count"],
+];
 
 export default function ConstraintObservatory() {
   const { analysisId, detail } = useAnalysis();
@@ -87,6 +109,17 @@ export default function ConstraintObservatory() {
               <Plot data={obsExp} height={260} layout={{ barmode: "group", bargap: 0.35, bargroupgap: 0.08, yaxis: { title: { text: "variants" } } }} />
             </Panel>
           </div>
+          <Panel eyebrow="all metrics" title="Every constraint metric reported for this gene">
+            <div className="overflow-x-auto scrollbar-thin"><table className="w-full min-w-[560px] text-[13.5px]">
+              <thead><tr>{["Metric", "Value", "Meaning", "Status"].map((h) => <th key={h} className="table-head">{h}</th>)}</tr></thead>
+              <tbody>{CONSTRAINT_ROWS.map(([k, label, meaning]) => { const v = num(k); return (
+                <tr key={k} className="border-t border-line/60"><td className="table-cell"><b>{label}</b><div className="font-mono text-[11px] text-faint">{k}</div></td>
+                  <td className="table-cell data">{v === null ? "—" : Number.isInteger(v) ? fmtInt(v) : fmtNum(v, 3)}</td>
+                  <td className="table-cell text-muted">{meaning}</td>
+                  <td className="table-cell">{v === null ? <span className="chip border-line text-faint">not available in source record</span> : <span className="chip border-good/40 text-good">retrieved</span>}</td></tr>); })}</tbody>
+            </table></div>
+            <p className="mt-2 text-[13px] text-muted">Source: gnomAD constraint (release as listed in the Source Manager). Values are retrieved, not calculated by GeneLens.</p>
+          </Panel>
           <Insight label={`What the metrics say about ${gene}`}
             reason={(num("pli") ?? 0) >= 0.9 || (num("oe_lof_upper") ?? 9) < 0.6
               ? `${gene} is depleted of loss-of-function variants in the general population – a sign of strong selective constraint.`

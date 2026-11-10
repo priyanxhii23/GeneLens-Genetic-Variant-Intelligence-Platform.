@@ -334,3 +334,31 @@ def build_csv_report(path: Path, analysis: dict, datasets: list[dict]) -> Path:
     df.insert(0, "analysis_id", analysis["id"])
     df.to_csv(path, index=False)
     return path
+
+
+def build_json_report(path: Path, analysis: dict, datasets: list[dict], flags: list[dict], synthetic: list[dict]) -> Path:
+    """Machine-readable report: metadata, provenance, results and plain-language flags.
+
+    REAL results and any SYNTHETIC jobs are kept in separate top-level sections and labelled."""
+    import json
+    from datetime import datetime, timezone
+
+    from app.utils import json_safe
+
+    res = analysis.get("results") or {}
+    body = {
+        "report": {"generator": "GeneLens", "generated_at": datetime.now(timezone.utc).isoformat(),
+                   "notice": "Research use only – not for clinical decision-making. Population frequencies describe "
+                             "reference samples and cannot be used to infer an individual's ancestry or risk."},
+        "analysis": {k: analysis.get(k) for k in ("id", "gene_symbol", "dataset", "reference_genome", "clinvar_source",
+                                                   "status", "created_at", "completed_at", "parameters")},
+        "provenance": {"data": "REAL", "datasets": datasets},
+        "results": {k: res.get(k) for k in ("gene", "dataset", "matching", "statistics", "populations", "constraint",
+                                             "interpretation", "qc", "anomaly_summary", "anomaly_thresholds")},
+        "flags": flags,
+        "synthetic_jobs": [{**j, "provenance": "SYNTHETIC",
+                            "notice": "Simulated records – not real observations; never pooled with REAL results."}
+                           for j in synthetic],
+    }
+    path.write_text(json.dumps(json_safe(body), indent=2, default=str), encoding="utf-8")
+    return path

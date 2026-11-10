@@ -100,18 +100,33 @@ def statistics(analysis_id: str, include_ambiguous: bool | None = None, provenan
 @router.get("/analysis/populations")
 def populations(analysis_id: str, provenance: str | None = PROVENANCE, db: Session = Depends(get_db)):
     a = get_analysis_or_404(db, analysis_id, require_completed=True)
+    stored = a.results.get("populations") or {}
+    if "overview" not in stored:  # analyses stored before the overview existed: recompute once and keep it
+        stored = json_safe(population_summary(load_rows(db, analysis_id)))
+        a.results = {**a.results, "populations": stored}
+        db.commit()
     if provenance is None:
-        return a.results["populations"]
+        return stored
     out = {}
     for name, loader in _rows_for(db, analysis_id, provenance).items():
         if name == "REAL":
-            out[name] = a.results["populations"]  # pre-computed – no rows needed
+            out[name] = stored  # pre-computed – no rows needed
         elif not _has_synthetic(db, analysis_id):
             out[name] = None
         else:
             rows = loader()
             out[name] = population_summary(rows) if rows else None
     return json_safe({"mode": provenance, "groups": out})
+
+
+@router.get("/analysis/pathogenicity")
+def pathogenicity_extras(analysis_id: str, db: Session = Depends(get_db)):
+    """VUS profile and classification by evaluation year (REAL data)."""
+    from app.pipeline.pathogenicity import classification_by_year, vus_profile
+
+    get_analysis_or_404(db, analysis_id, require_completed=True)
+    rows = load_rows(db, analysis_id)
+    return {"vus": vus_profile(rows), "history": classification_by_year(rows)}
 
 
 @router.get("/analysis/constraint")

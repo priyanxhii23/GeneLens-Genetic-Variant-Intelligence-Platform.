@@ -3,7 +3,7 @@ import type {
   AnalysisDetail, AnalysisSummary, Constraint, Dashboard, ExportRecord, Page, PopulationSummary, SourceStatus,
   Statistics, SyntheticJob, Thresholds, VariantDetail, VariantRow, AnomalySummary,
   Annotation, CompareGene, CompareParams, DatasetEntry, FlagItem, GeneSuggestion, Groups, ProvMode,
-  SavedComparison, SourceEntry, WhatIfResult, WhatIfThresholds, CustomDataset, TsvPipeline,
+  SavedComparison, SourceEntry, WhatIfResult, WhatIfThresholds, CustomDataset, TsvPipeline, PathoExtras,
 } from "./types";
 
 export class ApiError extends Error {
@@ -130,6 +130,7 @@ export const api = {
   dashboard: (analysis_id?: string | null, provenance: ProvMode = "REAL") => request<Dashboard>(`/dashboard${qs({ analysis_id, provenance })}`),
   statistics: (analysis_id: string, include_ambiguous?: boolean) => request<Statistics>(`/analysis/statistics${qs({ analysis_id, include_ambiguous })}`),
   populations: (analysis_id: string) => request<PopulationSummary>(`/analysis/populations${qs({ analysis_id })}`),
+  pathogenicity: (analysis_id: string) => request<PathoExtras>(`/analysis/pathogenicity${qs({ analysis_id })}`),
   constraint: (analysis_id: string) => request<Constraint>(`/analysis/constraint${qs({ analysis_id })}`),
   constraintCompare: (genes: string[]) => request<{ genes: { symbol: string; available: boolean; metrics?: Record<string, number>; error?: string; access_mode?: string }[]; docs: Constraint["docs"] }>(`/constraint/compare${qs({ genes: genes.join(",") })}`),
   variants: (params: Query) => request<Page<VariantRow>>(`/variants${qs(params)}`),
@@ -140,7 +141,7 @@ export const api = {
   generateSynthetic: (body: Record<string, unknown>) => post<SyntheticJob>("/synthetic/generate", body),
   syntheticJobs: (source_analysis_id?: string) => request<{ id: string; n_records: number; seed: number; created_at: string; model_source: string; source_analysis_id: string | null }[]>(`/synthetic${qs({ source_analysis_id })}`),
   syntheticJob: (id: string) => request<SyntheticJob>(`/synthetic/${id}`),
-  generateReport: (analysis_id: string, format: "pdf" | "csv") => post<ExportRecord>("/reports/generate", { analysis_id, format }),
+  generateReport: (analysis_id: string, format: "pdf" | "csv" | "json") => post<ExportRecord>("/reports/generate", { analysis_id, format }),
   reports: (analysis_id?: string) => request<ExportRecord[]>(`/reports${qs({ analysis_id })}`),
   downloadUrl: (id: string) => `/api/reports/${id}/download`,
   history: () => request<(AnalysisSummary & { datasets: AnalysisDetail["datasets"]; matched: number | null; flags: number | null })[]>("/history"),

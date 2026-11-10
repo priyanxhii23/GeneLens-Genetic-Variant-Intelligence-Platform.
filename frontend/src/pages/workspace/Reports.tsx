@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Download, FileJson, FileSpreadsheet, FileText } from "lucide-react";
 import { useState } from "react";
 import { Disclaimer, ErrorState, HelixLoader, Insight, PageHeader, Panel, stagger } from "../../components/ui";
 import ProvenanceHistory from "./ProvenanceHistory";
@@ -18,7 +18,7 @@ export default function Reports() {
   const [err, setErr] = useState<string | null>(null);
   const list = useFetch(analysisId ? () => api.reports(analysisId) : null, [analysisId]);
 
-  const gen = async (format: "pdf" | "csv") => {
+  const gen = async (format: "pdf" | "csv" | "json") => {
     if (!analysisId) return;
     setBusy(format); setErr(null);
     try {
@@ -36,7 +36,8 @@ export default function Reports() {
       {analysisId && <div className="layout-split">
         <div className="space-y-4">
           {[{ f: "pdf" as const, icon: FileText, t: "PDF research report", d: "Full report with Matplotlib/Seaborn charts, tables, methodology, limitations, citations and disclaimer." },
-            { f: "csv" as const, icon: FileSpreadsheet, t: "CSV statistics report", d: "Flat table of dataset provenance, matching counts, descriptive statistics, test results, anomaly counts and constraint metrics." }].map(({ f, icon: Icon, t, d }) => (
+            { f: "csv" as const, icon: FileSpreadsheet, t: "CSV statistics report", d: "Flat table of dataset provenance, matching counts, descriptive statistics, test results, anomaly counts and constraint metrics." },
+            { f: "json" as const, icon: FileJson, t: "JSON data report", d: "Machine-readable analysis: metadata, dataset provenance, all results, plain-language flags and any synthetic jobs in a separate, labelled section." }].map(({ f, icon: Icon, t, d }) => (
             <motion.button key={f} whileHover={{ y: -3 }} onClick={() => gen(f)} disabled={!!busy || detail?.analysis.status !== "completed"} className="panel group flex w-full items-start gap-4 p-5 text-left disabled:opacity-50">
               <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-accent/30 bg-accent/10 text-accent"><Icon size={22} /></span>
               <span className="flex-1"><span className="block font-display text-lg">{t}</span><span className="mt-1 block text-sm text-muted">{d}</span></span>

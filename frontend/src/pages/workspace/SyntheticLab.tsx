@@ -20,6 +20,10 @@ export default function SyntheticLab() {
   const [missing, setMissing] = useState(0.02);
   const [conflict, setConflict] = useState(0.03);
   const [unusual, setUnusual] = useState(0.03);
+  const [dupRate, setDupRate] = useState(0);
+  const [geneLabel, setGeneLabel] = useState("");
+  const [afMin, setAfMin] = useState("");
+  const [afMax, setAfMax] = useState("");
   const [pops, setPops] = useState<string[]>(ALL_POPS);
   const [job, setJob] = useState<SyntheticJob | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,6 +39,8 @@ export default function SyntheticLab() {
       setJob(await api.generateSynthetic({
         source_analysis_id: useReal ? analysisId : null, n_records: n, seed, populations: pops,
         class_distribution: mode === "custom" ? weights : null, missing_rate: missing, conflicting_rate: conflict, unusual_rate: unusual,
+        duplicate_rate: dupRate, gene_label: geneLabel.trim() || null,
+        af_min: afMin ? Number(afMin) : null, af_max: afMax ? Number(afMax) : null,
       }));
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
@@ -85,6 +91,14 @@ export default function SyntheticLab() {
               <label className="text-xs text-muted">Records<input type="number" min={1} max={100000} className="input mt-1 font-mono" value={n} onChange={(e) => setN(Number(e.target.value))} /></label>
               <label className="text-xs text-muted">Random seed<input type="number" className="input mt-1 font-mono" value={seed} onChange={(e) => setSeed(Number(e.target.value))} /></label>
             </div>
+            <label className="block text-xs text-muted">Gene label (optional)
+              <input className="input mt-1 font-mono" maxLength={20} placeholder={detail?.analysis.gene_symbol ?? "e.g. HBB"} value={geneLabel} onChange={(e) => setGeneLabel(e.target.value.replace(/[^A-Za-z0-9\-_.]/g, ""))} />
+              <span className="mt-1 block">Stored as <span className="data">SYN:{geneLabel || "…"}</span> so it can never be mistaken for a real gene record.</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs text-muted">Min allele frequency<input type="number" step="any" min={0} max={1} placeholder="1e-7" className="input mt-1 font-mono" value={afMin} onChange={(e) => setAfMin(e.target.value)} /></label>
+              <label className="text-xs text-muted">Max allele frequency<input type="number" step="any" min={0} max={1} placeholder="0.89" className="input mt-1 font-mono" value={afMax} onChange={(e) => setAfMax(e.target.value)} /></label>
+            </div>
             <div>
               <div className="eyebrow mb-2">classification mix</div>
               <Tabs value={mode} onChange={setMode} options={[{ value: "mirror", label: "Mirror fitted" }, { value: "custom", label: "Custom" }]} />
@@ -99,6 +113,7 @@ export default function SyntheticLab() {
             {rate("Missing values", missing, setMissing, "Fraction of records with missing frequency, population or classification fields")}
             {rate("Simulated conflicting classifications", conflict, setConflict, "Fraction assigned a conflicting label")}
             {rate("Unusual frequency patterns", unusual, setUnusual, "Half frequent-pathogenic (AF 1–10%), half very rare benign")}
+            {rate("Duplicate records", dupRate, setDupRate, "Fraction of records that repeat an earlier record's position and alleles – useful for testing deduplication")}
             <div>
               <div className="eyebrow mb-2">population groups</div>
               <div className="flex flex-wrap gap-1.5">{ALL_POPS.map((p) => { const on = pops.includes(p); return (

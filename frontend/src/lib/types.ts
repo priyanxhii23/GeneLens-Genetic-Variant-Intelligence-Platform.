@@ -59,9 +59,10 @@ export interface Thresholds {
   pathogenic_af: number; pathogenic_popmax_af: number; ba1_af: number; rare_benign_af: number;
   low_an_fraction: number; mad_z: number; use_isolation_forest: boolean; isolation_contamination: number; seed: number;
 }
-export interface PopulationGroup { id: string; label: string; grpmax_eligible: boolean; variants_observed: number; total_ac: number; median_an: number | null; mean_an: number | null; missing: number; missing_fraction: number | null; by_class: Record<string, { observed: number; total_ac: number }> }
+export interface PopulationGroup { id: string; label: string; grpmax_eligible: boolean; variants_observed: number; total_ac: number; median_an: number | null; mean_an: number | null; missing: number; missing_fraction: number | null; max_af?: number | null; max_af_variant?: string | null; max_af_id?: number | null; by_class: Record<string, { observed: number; total_ac: number }> }
 export interface PopulationSummary {
   populations: string[]; groups: PopulationGroup[]; n_variants: number; notes: string[];
+  overview?: { variants_with_population_data: number; variants_with_overall_af: number; median_overall_af: number | null; total_ac: number; max_an: number | null; variants_missing_some_population: number };
   matrix: { variant_key: string; id: number; hgvsp: string | null; hgvsc: string | null; coarse_class: CoarseClass; clinical_significance: string | null; af: number; provenance: Provenance; populations: Record<string, { af: number | null; ac: number; an: number } | null> }[];
   pathogenic_popmax_distribution: Record<string, number>;
 }
@@ -200,4 +201,12 @@ export interface CustomDataset {
   totals?: CustomSummary["totals"];
   inspection?: CustomInspection; mapping?: Record<string, string | null>; options?: { clinvar?: boolean };
   summary?: CustomSummary | null; history?: { at: string; action: string; detail: string | null }[];
+}
+
+export interface PathoExtras {
+  vus: { n_clinvar: number; n_vus: number; vus_fraction: number | null; vus_fraction_ci95: number[] | null;
+    frequency_bands: Record<string, number>; review_stars: Record<string, number>; variant_types: Record<string, number>;
+    vus_with_population_af_over_1pct: number; note: string;
+    examples_high_population_af: { id: number; variant_key: string; hgvsp: string | null; af: number | null; popmax_af: number | null; popmax_population: string | null }[] };
+  history: { years: number[]; counts: Record<string, number[]>; without_date: number; available: boolean; label: string };
 }

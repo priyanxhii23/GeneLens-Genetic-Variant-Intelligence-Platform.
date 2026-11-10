@@ -8,7 +8,7 @@ import { api } from "../../lib/api";
 import { useAnalysis, useFetch } from "../../lib/analysis";
 import { CLASS_META, FINE_LABELS, fmtAF, fmtInt, MAIN_CLASSES, token } from "../../lib/format";
 import { useProvenance } from "../../lib/provenance";
-import type { CoarseClass, Statistics } from "../../lib/types";
+import type { CoarseClass, PathoExtras, Statistics } from "../../lib/types";
 
 const FINE_ORDER = ["pathogenic", "pathogenic_likely_pathogenic", "likely_pathogenic", "uncertain_significance",
   "likely_benign", "benign_likely_benign", "benign", "conflicting", "other", "not_provided"];
@@ -27,6 +27,7 @@ export default function PathogenicityLab() {
   const st = useFetch(analysisId && detail?.results ? () => api.statisticsFor(analysisId, mode) : null, [analysisId, mode, detail?.results]);
   const groups = (Object.entries(st.data?.groups ?? {}).filter(([, v]) => v) as [G, Statistics][]);
   const conflicting = useFetch(analysisId ? () => api.variants({ analysis_id: analysisId, provenance: mode, coarse_class: ["CONFLICTING"], sort: "af", order: "desc", page_size: 12 }) : null, [analysisId, mode]);
+  const extras = useFetch(analysisId && detail?.results ? () => api.pathogenicity(analysisId) : null, [analysisId, detail?.results]);
   const flags = useFetch(analysisId && detail?.results ? () => api.anomalies({ analysis_id: analysisId, kind: "biological_interest", provenance: mode, page_size: 200 }) : null, [analysisId, detail?.results, mode]);
 
   const fineBar = useMemo(() => groups.map(([g, s]) => {
@@ -157,6 +158,8 @@ export default function PathogenicityLab() {
         <p className="meta mt-3">Showing {Math.min(8, unusual.length)} of {unusual.length} frequency-related flags. A flag is a prompt for review, never a statement that a variant is misclassified.</p>
       </Panel>
 
+      {extras.data && <PathoExtrasPanels x={extras.data} onOpen={setOpen} />}
+      {extras.error && <ErrorState message={extras.error} onRetry={extras.reload} />}
       <Guide>
         <GuideItem term={<><Term k="P/LP">P/LP</Term>, <Term k="VUS">VUS</Term>, <Term k="B/LB">B/LB</Term></>}>ClinVar's five main classifications grouped into three: <b>pathogenic / likely pathogenic</b>, <b>uncertain significance</b>, and <b>benign / likely benign</b>. <b>Conflicting</b> means submitters disagree.</GuideItem>
         <GuideItem term="Why a log scale?">Frequencies span six orders of magnitude. On the plots, <b>log10(AF) = −5</b> means 1 in 100,000 chromosomes and <b>−2</b> means 1 in 100. Each step left is ten times rarer.</GuideItem>
@@ -168,5 +171,32 @@ export default function PathogenicityLab() {
       <Disclaimer compact />
       <VariantDrawer id={open} onClose={() => setOpen(null)} />
     </motion.div>
+  );
+}
+
+function PathoExtrasPanels({ x, onOpen }: { x: PathoExtras; onOpen: (id: number) => void }) {
+  const v = x.vus; const h = x.history;
+  const bands = Object.entries(v.frequency_bands);
+  return (
+    <div className="layout-halves">
+      <Panel eyebrow="uncertain significance" title="VUS analysis (REAL data)">
+        <p className="text-[14.5px]"><b className="data">{fmtInt(v.n_vus)}</b> of {fmtInt(v.n_clinvar)} ClinVar records are VUS
+          {v.vus_fraction !== null && <> – <b>{(v.vus_fraction * 100).toFixed(1)}%</b>{v.vus_fraction_ci95 && <span className="text-muted"> (95% CI {(v.vus_fraction_ci95[0] * 100).toFixed(1)}–{(v.vus_fraction_ci95[1] * 100).toFixed(1)}%)</span>}</>}.</p>
+        <Plot height={240} data={[{ type: "bar", x: bands.map(([k]) => k), y: bands.map(([, n]) => n), marker: { color: token("vus") }, hovertemplate: "%{x}: %{y}<extra></extra>" }]}
+          layout={{ margin: { l: 48, r: 12, t: 12, b: 60 }, yaxis: { title: { text: "VUS records" } } }} />
+        <p className="mt-2 text-[13px] text-muted">Review stars: {Object.entries(v.review_stars).map(([k, n]) => `${k}★ ${fmtInt(n)}`).join(" · ") || "—"}. {v.vus_with_population_af_over_1pct} VUS reach ≥1% in at least one population. {v.note}</p>
+        {v.examples_high_population_af.length > 0 && (
+          <ul className="mt-2 space-y-1 text-[13px]">{v.examples_high_population_af.map((e) => (
+            <li key={e.variant_key}><button className="font-mono text-accent hover:underline" onClick={() => onOpen(e.id)}>{e.hgvsp ?? e.variant_key}</button> – highest population AF {fmtAF(e.popmax_af)} ({e.popmax_population})</li>
+          ))}</ul>
+        )}
+      </Panel>
+      <Panel eyebrow="classification history" title="Classifications by year of last evaluation">
+        {h.available ? <Plot height={280} data={MAIN_CLASSES.map((c) => ({ type: "bar" as const, name: CLASS_META[c].short, x: h.years, y: h.counts[c], marker: { color: token(CLASS_META[c].color) }, hovertemplate: `${CLASS_META[c].short} · %{x}: %{y}<extra></extra>` }))}
+          layout={{ barmode: "stack", margin: { l: 48, r: 12, t: 28, b: 40 }, yaxis: { title: { text: "records" } } }} />
+          : <p className="py-8 text-center text-muted">No evaluation dates are available in the source records.</p>}
+        <p className="mt-2 text-[13px] text-muted">{h.label} {fmtInt(h.without_date)} records have no evaluation date. A recent date does not by itself mean a variant was reclassified.</p>
+      </Panel>
+    </div>
   );
 }

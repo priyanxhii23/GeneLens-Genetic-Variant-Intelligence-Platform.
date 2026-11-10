@@ -91,13 +91,17 @@ class SyntheticRequest(BaseModel):
     missing_rate: float = Field(0.0, ge=0, le=0.5)
     conflicting_rate: float = Field(0.0, ge=0, le=0.5)
     unusual_rate: float = Field(0.0, ge=0, le=0.5)
+    duplicate_rate: float = Field(0.0, ge=0, le=0.5)
+    gene_label: str | None = Field(None, max_length=20, pattern=r"^[A-Za-z0-9\-_.]*$")
+    af_min: float | None = Field(None, gt=0, le=1)
+    af_max: float | None = Field(None, gt=0, le=1)
     populations: list[str] = Field(default_factory=lambda: ["afr", "amr", "asj", "eas", "fin", "mid", "nfe",
                                                             "sas", "remaining"])
 
 
 class ReportRequest(BaseModel):
     analysis_id: str
-    format: Literal["pdf", "csv"] = "pdf"
+    format: Literal["pdf", "csv", "json"] = "pdf"
 
 
 class ExportOut(BaseModel):

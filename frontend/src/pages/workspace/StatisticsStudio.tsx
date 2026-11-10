@@ -81,6 +81,14 @@ function TestCard({ t }: { t: StatTest }) {
   );
 }
 
+/** Wilson score interval (95%) – same method as the backend; returns [estimate, lower, upper]. */
+function wilson(k: number, n: number): [number, number, number] | null {
+  if (!n) return null;
+  const z = 1.959963984540054, p = k / n, d = 1 + (z * z) / n;
+  const c = (p + (z * z) / (2 * n)) / d, h = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / d;
+  return [p, Math.max(0, c - h), Math.min(1, c + h)];
+}
+
 export default function StatisticsStudio() {
   const { analysisId, detail } = useAnalysis();
   const { mode } = useProvenance();
@@ -149,6 +157,23 @@ export default function StatisticsStudio() {
               )}
             </Panel>
           </div>
+          {s.gnomad_presence_by_class && (() => {
+            const g = s.gnomad_presence_by_class; const n = MAIN_CLASSES.reduce((a, c) => a + (g[c]?.total ?? 0), 0);
+            return n > 0 && (
+              <Panel eyebrow="proportions with 95% Wilson intervals" title="Classification mix and frequency-data coverage">
+                <div className="overflow-x-auto scrollbar-thin"><table className="w-full min-w-[560px] text-[13.5px]">
+                  <thead><tr>{["Class", "Records", "Share of classified records", "Found in frequency dataset"].map((h) => <th key={h} className="table-head">{h}</th>)}</tr></thead>
+                  <tbody>{MAIN_CLASSES.map((c) => { const t = g[c]?.total ?? 0; const share = wilson(t, n); const cov = wilson(g[c]?.in_gnomad ?? 0, t); return (
+                    <tr key={c} className="border-t border-line/60"><td className="table-cell"><ClassBadge cls={c} /></td><td className="table-cell data">{fmtInt(t)}</td>
+                      <td className="table-cell data">{share ? `${pct(share[0])} (${pct(share[1])}–${pct(share[2])})` : "—"}</td>
+                      <td className="table-cell data">{cov ? `${pct(cov[0])} (${pct(cov[1])}–${pct(cov[2])})` : "not calculable (n = 0)"}</td></tr>); })}</tbody>
+                </table></div>
+              </Panel>
+            );
+          })()}
+          <Insight label="Statistical vs biological significance" reason="A statistically significant result says a difference is unlikely to be chance in this sample; it does not say the difference matters biologically or clinically.">
+            <p>With thousands of variants, tiny differences become “significant”. Read the <b>effect size</b> and its interval to judge magnitude. Tests marked <b>not run</b> did not have enough records or violated their assumptions – their results would be invalid, so GeneLens does not show a p-value for them. Sample sizes used by every test are listed on its card.</p>
+          </Insight>
           <div className="rounded-xl border border-accent/30 bg-accent/5 px-4 py-3 text-[14.5px] text-muted"><b className="text-ink">{s.multiple_testing.method}</b> across {s.multiple_testing.m} tests. {s.multiple_testing.explanation}</div>
           <motion.div variants={stagger} className="grid gap-4 lg:grid-cols-2">{s.tests.map((t, i) => <TestCard key={`${active}-${i}`} t={t} />)}</motion.div>
           <Guide title="Beginner's guide to these statistics">

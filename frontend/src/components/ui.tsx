@@ -79,8 +79,8 @@ export function Counter({ value, decimals = 0 }: { value: number; decimals?: num
   return <motion.span ref={ref}>{text}</motion.span>;
 }
 
-export function Metric({ label, value, value2, hint, tone = "accent", icon, decimals, glow = false }: {
-  label: string; value: number | null | undefined; value2?: number | null; hint?: ReactNode; tone?: string;
+export function Metric({ label, value, value2, hint, tone = "accent", icon, decimals, glow = false, text }: {
+  label: string; value: number | null | undefined; text?: string; value2?: number | null; hint?: ReactNode; tone?: string;
   icon?: ReactNode; decimals?: number; glow?: boolean;
 }) {
   return (
@@ -91,7 +91,7 @@ export function Metric({ label, value, value2, hint, tone = "accent", icon, deci
         {icon && <span className={`text-${tone}`}>{icon}</span>}
       </div>
       <div className="mt-2 flex items-baseline gap-3">
-        <span className="data text-[28px] font-medium md:text-[32px]">{value === null || value === undefined ? "—" : <Counter value={value} decimals={decimals} />}</span>
+        <span className="data text-[28px] font-medium md:text-[32px]">{text !== undefined ? text : value === null || value === undefined ? "—" : <Counter value={value} decimals={decimals} />}</span>
         {value2 !== undefined && value2 !== null && (
           <span className="data text-[15px] text-pink" title="synthetic records"><Counter value={value2} /> syn</span>
         )}

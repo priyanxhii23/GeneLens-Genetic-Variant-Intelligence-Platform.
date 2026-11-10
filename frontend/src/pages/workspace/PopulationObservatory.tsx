@@ -1,13 +1,13 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import Plot from "../../components/Plot";
-import { ClassBadge, ErrorState, Guide, GuideItem, HelixLoader, Insight, NeedsAnalysis, PageHeader, Panel, ProvenanceBadge, stagger, Tabs, Term } from "../../components/ui";
+import { ClassBadge, ErrorState, Metric, Guide, GuideItem, HelixLoader, Insight, NeedsAnalysis, PageHeader, Panel, ProvenanceBadge, stagger, Tabs, Term } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useFetch } from "../../lib/analysis";
 import { useProvenance } from "../../lib/provenance";
 import { VariantDrawer } from "./VariantExplorer";
 import { useAnalysis } from "../../lib/analysis";
-import { CLASS_META, fmtAF, fmtInt, MAIN_CLASSES, pct, POP_LABELS, token } from "../../lib/format";
+import { CLASS_META, fmtAF, fmtDate, fmtInt, MAIN_CLASSES, pct, POP_LABELS, token } from "../../lib/format";
 
 export default function PopulationObservatory() {
   const { analysisId, detail } = useAnalysis();
@@ -68,6 +68,20 @@ export default function PopulationObservatory() {
         </Insight>
       )}
 
+      {pops.overview && (() => {
+        const o = pops.overview; const hi = [...pops.groups].filter((g) => g.max_af != null).sort((a, b) => (b.max_af ?? 0) - (a.max_af ?? 0))[0];
+        const meta = which === "REAL" ? detail?.datasets?.find((d) => d.source !== "ClinVar" && d.source !== "gnomAD-constraint") : undefined;
+        return (<>
+          <div className="layout-metrics">
+            <Metric label="Variants with population data" value={o.variants_with_population_data} />
+            <Metric label="Population groups" value={pops.populations.length} tone="violet" />
+            <Metric label="Median overall AF" value={null} text={o.median_overall_af === null ? "n/a" : fmtAF(o.median_overall_af)} hint={`${fmtInt(o.variants_with_overall_af)} variants with an overall AF`} />
+            <Metric label="Highest population AF" value={null} text={hi ? fmtAF(hi.max_af) : "n/a"} hint={hi ? `in ${hi.label}` : "not available"} tone="warn" />
+            <Metric label="Missing some groups" value={o.variants_missing_some_population} tone="warn" hint="at least one group without data" />
+          </div>
+          {meta && <p className="meta">Source: {meta.source} · {meta.release ?? meta.dataset} · {meta.reference_genome} · retrieved {fmtDate(meta.retrieved_at)} ({meta.access_mode.replace(/_/g, " ")}) · max AN {fmtInt(o.max_an)}</p>}
+        </>);
+      })()}
       <Panel bodyClass="p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="eyebrow mr-2">populations</span>
@@ -107,11 +121,12 @@ export default function PopulationObservatory() {
       <Panel eyebrow="interactive comparison" title="Group summary">
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full min-w-[720px]">
-            <thead><tr>{["Group", "Label", "Variants AC>0", "Total AC", "Median AN", "Missing AN", "grpmax eligible"].map((h) => <th key={h} className="table-head">{h}</th>)}</tr></thead>
+            <thead><tr>{["Group", "Label", "Variants AC>0", "Total AC", "Median AN", "Highest AF in group", "Missing AN", "grpmax eligible"].map((h) => <th key={h} className="table-head">{h}</th>)}</tr></thead>
             <tbody>{pops.groups.filter((g) => active.includes(g.id)).map((g) => (
               <tr key={g.id}><td className="table-cell font-mono text-xs">{g.id}</td><td className="table-cell text-sm">{g.label}</td>
                 <td className="table-cell data">{fmtInt(g.variants_observed)}</td><td className="table-cell data">{fmtInt(g.total_ac)}</td>
                 <td className="table-cell data">{g.median_an === null ? "—" : fmtInt(Math.round(g.median_an))}</td>
+                <td className="table-cell text-[13px]">{g.max_af === undefined || g.max_af === null ? <span className="text-faint">—</span> : <button className="text-left hover:text-accent" onClick={() => g.max_af_id && setOpen(g.max_af_id)}><span className="data">{fmtAF(g.max_af)}</span><span className="block max-w-[180px] truncate font-mono text-[11px] text-muted">{g.max_af_variant}</span></button>}</td>
                 <td className="table-cell"><span className={`chip ${g.missing ? "border-warn/40 text-warn" : "border-line text-muted"}`}>{fmtInt(g.missing)} · {pct(g.missing_fraction)}</span></td>
                 <td className="table-cell text-xs text-muted">{g.grpmax_eligible ? "yes" : "no"}</td></tr>))}</tbody>
           </table>
