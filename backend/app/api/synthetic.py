@@ -58,6 +58,12 @@ def generate(req: SyntheticRequest, db: Session = Depends(get_db)):
                 "caught; frequent-pathogenic injections ≥ 0.5 % likewise).",
     }
     comparison = syn.compare(real_rows, records) if real_rows else None
+    if req.source_analysis_id:
+        # Store screening flags for ALL synthetic rows of this analysis (provenance SYNTHETIC), with DB ids.
+        db.flush()
+        from app.pipeline.runner import load_synthetic_rows, persist_anomalies
+        persist_anomalies(db, req.source_analysis_id, load_synthetic_rows(db, req.source_analysis_id),
+                          None, provenance="SYNTHETIC")
     job.comparison = json_safe({"distribution": comparison, "anomaly_engine_evaluation": evaluation,
                       "screen_summary": screen["summary"]})
     job.status = "completed"

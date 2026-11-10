@@ -28,10 +28,16 @@ def interpret(gene: str, matching: dict, statistics: dict, anomalies: dict, cons
               populations: dict) -> dict:
     findings = []
     m = matching
-    findings.append(
-        f"{m['gnomad_records']:,} gnomAD variants and {m['clinvar_records']:,} ClinVar records were retrieved for "
-        f"{gene}; {m['matched_variants']:,} alleles were matched "
-        f"({(m['clinvar_match_rate'] or 0):.1%} of ClinVar records with allele-level coordinates).")
+    src = m.get("frequency_source", "gnomAD") if "frequency_source" in m else "gnomAD"
+    if src:
+        findings.append(
+            f"{m['gnomad_records']:,} {src} records and {m['clinvar_records']:,} ClinVar records were retrieved for "
+            f"{gene}; {m['matched_variants']:,} alleles were matched "
+            f"({(m['clinvar_match_rate'] or 0):.1%} of ClinVar records with allele-level coordinates).")
+    else:
+        findings.append(
+            f"{m['clinvar_records']:,} ClinVar records were retrieved for {gene}. A clinical-annotation dataset was "
+            "selected, so no population frequencies were used and frequency-based tests do not apply.")
     for t in statistics.get("tests", []):
         if not t.get("ran"):
             findings.append(f"{t['test']} ({t.get('comparison') or t.get('variables')}) was not run: {t['reason']}")

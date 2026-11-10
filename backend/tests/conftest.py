@@ -33,6 +33,8 @@ def fake_clients(monkeypatch):
 
     monkeypatch.setattr(runner, "GnomadClient", FakeGnomad)
     monkeypatch.setattr(runner, "ClinVarClient", FakeClinVar)
+    # gene annotation calls Ensembl/UCSC; tests must stay offline
+    monkeypatch.setattr(runner, "_annotate_gene", lambda *a, **k: {"sources": {}, "test_fixture": True})
     return FakeGnomad(), FakeClinVar()
 
 

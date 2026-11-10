@@ -26,6 +26,7 @@ import pandas as pd
 from app.config import get_settings
 from app.services.cache import DiskCache
 from app.services.http import ExternalServiceError, request_with_retry
+from app.sources.tracking import record_error, record_retrieval
 
 log = logging.getLogger(__name__)
 
@@ -107,6 +108,10 @@ def parse_esummary_record(rec: dict) -> dict:
                 pos = int(loc["start"]) if loc.get("start", "").isdigit() else None
                 coordinate_source = "location_only"
     last_eval = (germ.get("last_evaluated") or "").split(" ")[0] or None
+    locs = {}
+    for loc in vset.get("variation_loc") or []:
+        if loc.get("assembly_name") in ("GRCh38", "GRCh37") and str(loc.get("start", "")).isdigit():
+            locs[loc["assembly_name"]] = {"chr": loc.get("chr"), "start": int(loc["start"])}
     return {
         "clinvar_variation_id": str(rec.get("uid")),
         "clinvar_allele_id": str(vset.get("measure_id")) if vset.get("measure_id") else None,
@@ -121,7 +126,30 @@ def parse_esummary_record(rec: dict) -> dict:
         "name": rec.get("title"),
         "rsid": f"rs{rsids[0]}" if rsids else None,
         "coordinate_source": coordinate_source,
+        "locations": locs,
     }
+
+
+def to_grch37(rec: dict) -> dict:
+    """Express an E-utilities ClinVar record (GRCh38 SPDI alleles) in GRCh37 coordinates.
+
+    ClinVar reports the variant's start on both assemblies. Their difference is
+    the local GRCh38→GRCh37 coordinate offset, applied to the SPDI-derived
+    position; alleles are unchanged (the reference strand is the same). Records
+    without both locations, or whose chromosome differs, get no coordinates
+    and become *unmatchable* – they are never guessed.
+    """
+    out = dict(rec)
+    locs = rec.get("locations") or {}
+    l38, l37 = locs.get("GRCh38"), locs.get("GRCh37")
+    if rec.get("pos") is None or not (l38 and l37) or str(l38.get("chr")) != str(l37.get("chr")):
+        out.update(pos=None, ref=None, alt=None, coordinate_source=(
+            rec.get("coordinate_source") if rec.get("coordinate_source") == "multi_allele_record"
+            else "no_grch37_location"))
+        return out
+    out["pos"] = rec["pos"] + (l37["start"] - l38["start"])
+    out["coordinate_source"] = "grch37_location_offset"
+    return out
 
 
 class ClinVarClient:
@@ -164,7 +192,7 @@ class ClinVarClient:
     # -- E-utilities --------------------------------------------------------
     def fetch_gene_eutils(self, symbol: str, progress=None) -> tuple[list[dict], dict]:
         symbol = symbol.upper()
-        key = DiskCache.key("eutils_gene", symbol)
+        key = DiskCache.key("eutils_gene_v2", symbol)
         hit = self.cache.get(key)
         if hit:
             return hit["payload"], {**hit["meta"], "access_mode": "cache"}
@@ -174,6 +202,7 @@ class ClinVarClient:
         except ExternalServiceError as exc:
             from app.services.gnomad_client import load_snapshot
 
+            record_error("clinvar_eutils", str(exc))
             if exc.status_code == 404:
                 raise
             snap = load_snapshot(symbol, "clinvar", "esummary")
@@ -207,6 +236,7 @@ class ClinVarClient:
             "total_reported": total,
         }
         self.cache.set(key, records, meta)
+        record_retrieval("clinvar_eutils", len(records))
         return records, meta
 
     # -- Bulk TSV ---------------------------------------------------------------
@@ -263,6 +293,8 @@ class ClinVarClient:
             df.to_csv(cache_file, index=False)
             mode = "local_tsv"
         records = [tsv_row_to_record(r) for r in df.to_dict("records")]
+        if mode == "local_tsv":
+            record_retrieval("clinvar_tsv", len(records))
         meta = {
             "retrieved_at": datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).isoformat(),
             "access_mode": mode,

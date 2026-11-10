@@ -153,6 +153,11 @@ class AnomalyResult(Base):
     score: Mapped[float] = mapped_column(Float, default=0.0)
     evidence: Mapped[dict] = mapped_column(JSON, default=dict)
     explanation: Mapped[str] = mapped_column(Text)
+    # Plain-language presentation (Part 6): short reason, why it matters, what to check next.
+    headline: Mapped[str | None] = mapped_column(String(160))
+    reason: Mapped[str | None] = mapped_column(Text)
+    why_it_matters: Mapped[str | None] = mapped_column(Text)
+    recommendation: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -182,4 +187,34 @@ class ExportRecord(Base):
     path: Mapped[str] = mapped_column(Text)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     parameters: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SourceStatus(Base):
+    """Live health + usage statistics for each registered data source (one row per source)."""
+    __tablename__ = "source_status"
+
+    source_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    available: Mapped[bool | None] = mapped_column(Boolean)
+    detail: Mapped[str | None] = mapped_column(Text)
+    release: Mapped[str | None] = mapped_column(String(160))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_retrieval_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    records_retrieved: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SavedComparison(Base):
+    """A saved Gene Comparison Lab configuration with a snapshot of its results."""
+    __tablename__ = "saved_comparisons"
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(160))
+    genes: Mapped[list] = mapped_column(JSON)
+    dataset: Mapped[str] = mapped_column(String(64))
+    parameters: Mapped[dict] = mapped_column(JSON, default=dict)
+    results: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

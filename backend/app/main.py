@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import analysis, anomalies, history, reports, synthetic, system, variants
+from app.api import analysis, anomalies, compare, history, reports, synthetic, system, variants
 from app.config import get_settings
 from app.database import init_db
 from app.pipeline.matching import AssemblyMismatchError
@@ -71,5 +71,5 @@ async def unhandled(_: Request, exc: Exception):
 
 
 for r in (system.router, analysis.router, variants.router, anomalies.router, synthetic.router, reports.router,
-          history.router):
+          history.router, compare.router):
     app.include_router(r, prefix="/api")

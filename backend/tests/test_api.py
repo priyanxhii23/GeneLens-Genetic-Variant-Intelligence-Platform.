@@ -22,7 +22,9 @@ def test_health(client):
 def test_validation_errors(client):
     assert client.post("/api/analysis/run", json={"gene": "BAD GENE!"}).status_code == 422
     assert client.post("/api/analysis/run", json={"gene": "HBB", "dataset": "nope"}).status_code == 422
-    assert client.post("/api/analysis/run", json={"gene": "HBB", "dataset": "gnomad_r2_1"}).status_code == 422
+    # dbSNP is only offered with live ClinVar (E-utilities); GRCh37 + E-utilities is now supported
+    assert client.post("/api/analysis/run", json={"gene": "HBB", "dataset": "dbsnp_refsnp",
+                                                  "clinvar_source": "tsv"}).status_code == 422
     assert client.get("/api/analysis/doesnotexist/status").status_code == 404
 
 

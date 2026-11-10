@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.services.gnomad_client import DATASET_GENOME
+from app.datasets import BY_ID as DATASET_BY_ID
 
 
 class AnomalyThresholdsIn(BaseModel):
@@ -40,8 +40,8 @@ class AnalysisRunRequest(BaseModel):
     @field_validator("dataset")
     @classmethod
     def _dataset(cls, v: str) -> str:
-        if v not in DATASET_GENOME:
-            raise ValueError(f"dataset must be one of {sorted(DATASET_GENOME)}")
+        if v not in DATASET_BY_ID:
+            raise ValueError(f"dataset must be one of {sorted(DATASET_BY_ID)}")
         return v
 
 

@@ -31,6 +31,8 @@ def _filtered(analysis_id: str | None, synthetic_job_id: str | None, provenance:
               max_af: float | None, variant_type: str | None, flagged_only: bool, db: Session) -> Select:
     if not analysis_id and not synthetic_job_id:
         raise HTTPException(422, "Provide analysis_id or synthetic_job_id")
+    if provenance == "BOTH":  # UI name for ALL
+        provenance = "ALL"
     q = select(Variant)
     scope = []
     if analysis_id and provenance in ("REAL", "ALL"):
@@ -65,7 +67,7 @@ def _filtered(analysis_id: str | None, synthetic_job_id: str | None, provenance:
 
 
 def _common(analysis_id: str | None = None, synthetic_job_id: str | None = None,
-            provenance: str = Query("REAL", pattern="^(REAL|SYNTHETIC|ALL)$"), search: str | None = None,
+            provenance: str = Query("REAL", pattern="^(REAL|SYNTHETIC|ALL|BOTH)$"), search: str | None = None,
             coarse_class: list[str] | None = Query(None), match_status: list[str] | None = Query(None),
             min_af: float | None = Query(None, ge=0, le=1), max_af: float | None = Query(None, ge=0, le=1),
             variant_type: str | None = None, flagged_only: bool = False):

@@ -49,3 +49,27 @@ def init_db() -> None:
     from app import models  # noqa: F401 - registers tables
 
     Base.metadata.create_all(bind=engine)
+    ensure_columns()
+
+
+def ensure_columns() -> None:
+    """Add columns introduced after a database was first created.
+
+    ``create_all`` creates missing *tables* but never alters existing ones, so a
+    database made by an older GeneLens version would lack new columns. Each
+    missing nullable column is added with ``ALTER TABLE … ADD COLUMN`` (safe on
+    SQLite and PostgreSQL). Alembic migrations in ``migrations/`` describe the
+    same changes for deployments that manage the schema explicitly.
+    """
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            existing = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name not in existing and col.nullable:
+                    ddl = col.type.compile(dialect=engine.dialect)
+                    conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN "{col.name}" {ddl}'))

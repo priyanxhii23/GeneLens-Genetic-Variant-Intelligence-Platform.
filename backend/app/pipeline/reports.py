@@ -199,7 +199,7 @@ def build_pdf(path: Path, analysis: dict, datasets: list[dict], flags: list[dict
 
     story.append(Paragraph("3. Dataset statistics & matching", h2))
     m = res["matching"]
-    mrows = [["Metric", "Value"], ["gnomAD variants", f"{m['gnomad_records']:,}"],
+    mrows = [["Metric", "Value"], [f"{m.get('frequency_source') or 'Frequency-dataset'} records", f"{m['gnomad_records']:,}"],
              ["ClinVar records", f"{m['clinvar_records']:,}"],
              ["ClinVar records with allele coordinates", f"{m['clinvar_with_allele_coordinates']:,}"],
              ["Matched alleles", f"{m['matched_variants']:,}"],
