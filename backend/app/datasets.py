@@ -15,7 +15,6 @@ the *clinical_annotation* dataset provides classifications only; the
 """
 from __future__ import annotations
 
-import time
 from dataclasses import asdict, dataclass
 
 from app.services.gnomad_client import DATASET_GENOME
@@ -81,27 +80,11 @@ DATASETS: list[DatasetSpec] = [
 ]
 BY_ID = {d.id: d for d in DATASETS}
 
-_cache: dict = {"at": 0.0, "value": None}
-
-
-def _gnomad_enum() -> set[str]:
-    from app.services.gnomad_client import GnomadClient
-
-    data = GnomadClient()._post('{ __type(name:"DatasetId"){ enumValues{ name } } }')
-    return {e["name"] for e in data["__type"]["enumValues"]}
-
-
 def dataset_status(refresh: bool = False) -> list[dict]:
-    """Registry entries with live availability. Cached for 10 minutes."""
-    if not refresh and _cache["value"] and time.time() - _cache["at"] < 600:
-        return _cache["value"]
-    from app.sources.registry import BY_ID as SOURCES
+    """Registry entries with live availability, computed from the shared (parallel, cached) probes."""
+    from app.sources.status_cache import get_probes
 
-    checks = {sid: SOURCES[sid].check() for sid in ("gnomad", "clinvar_eutils", "clinvar_tsv", "ensembl", "dbsnp", "igsr")}
-    try:
-        enum = _gnomad_enum() if checks["gnomad"]["available"] else set()
-    except Exception:  # noqa: BLE001
-        enum = set()
+    checks, enum = get_probes(force=refresh)
     out = []
     for d in DATASETS:
         status, detail, release = "unavailable", "", d.release
@@ -130,5 +113,4 @@ def dataset_status(refresh: bool = False) -> list[dict]:
             release = checks["dbsnp"].get("release") or d.release
         out.append({**asdict(d), "source_ids": list(d.source_ids), "clinvar_sources": list(d.clinvar_sources),
                     "status": status, "status_detail": detail, "release": release})
-    _cache.update(at=time.time(), value=out)
     return out

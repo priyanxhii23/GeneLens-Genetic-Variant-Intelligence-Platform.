@@ -86,12 +86,16 @@ class Variant(Base):
     __table_args__ = (
         Index("ix_variant_analysis_class", "analysis_id", "coarse_class"),
         Index("ix_variant_analysis_key", "analysis_id", "variant_key"),
+        Index("ix_variant_analysis_prov", "analysis_id", "provenance"),
+        Index("ix_variant_synjob_prov", "synthetic_job_id", "provenance"),
+        Index("ix_variant_custom_prov", "custom_dataset_id", "provenance"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     analysis_id: Mapped[str | None] = mapped_column(ForeignKey("analysis_sessions.id", ondelete="CASCADE"), index=True)
     synthetic_job_id: Mapped[str | None] = mapped_column(ForeignKey("synthetic_jobs.id", ondelete="CASCADE"), index=True)
-    provenance: Mapped[str] = mapped_column(String(10), index=True)  # REAL | SYNTHETIC
+    custom_dataset_id: Mapped[str | None] = mapped_column(ForeignKey("custom_datasets.id", ondelete="CASCADE"))
+    provenance: Mapped[str] = mapped_column(String(10), index=True)  # REAL | SYNTHETIC | CUSTOM
     variant_key: Mapped[str] = mapped_column(String(512))  # chrom-pos-ref-alt or SYN-xxxx
     minimal_key: Mapped[str | None] = mapped_column(String(512))
     gene_symbol: Mapped[str | None] = mapped_column(String(32))
@@ -140,6 +144,7 @@ class Variant(Base):
 
 class AnomalyResult(Base):
     __tablename__ = "anomaly_results"
+    __table_args__ = (Index("ix_anomaly_analysis_prov", "analysis_id", "provenance"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     analysis_id: Mapped[str] = mapped_column(ForeignKey("analysis_sessions.id", ondelete="CASCADE"), index=True)
@@ -218,3 +223,30 @@ class SavedComparison(Base):
     parameters: Mapped[dict] = mapped_column(JSON, default=dict)
     results: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CustomDataset(Base):
+    """A user-uploaded variant dataset (CUSTOM DATA) and its processing provenance."""
+    __tablename__ = "custom_datasets"
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(160))
+    filename: Mapped[str] = mapped_column(String(256))
+    file_format: Mapped[str] = mapped_column(String(16))          # csv | tsv | txt | vcf | vcf.gz | json
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    assembly: Mapped[str] = mapped_column(String(16), default="unknown")   # GRCh37 | GRCh38 | unknown
+    assembly_source: Mapped[str | None] = mapped_column(String(32))        # user | file_header | None
+    status: Mapped[str] = mapped_column(String(16), default="inspected")   # inspected|queued|processing|completed|failed
+    stage: Mapped[str | None] = mapped_column(String(80))
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    stored_path: Mapped[str] = mapped_column(Text)
+    cleaned_path: Mapped[str | None] = mapped_column(Text)
+    inspection: Mapped[dict | None] = mapped_column(JSON)
+    mapping: Mapped[dict | None] = mapped_column(JSON)
+    options: Mapped[dict | None] = mapped_column(JSON)
+    summary: Mapped[dict | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(Text)
+    history: Mapped[list | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

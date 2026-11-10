@@ -139,6 +139,8 @@ def run_analysis(db: Session, analysis_id: str, gnomad: GnomadClient | None = No
         for i in range(0, len(payload), 2000):
             db.execute(insert(Variant), payload[i:i + 2000])
         db.commit()
+        from app.pipeline import rowcache
+        rowcache.invalidate()
         stored = _load_rows(db, a.id)
 
         # 6. STATISTICS -------------------------------------------------------------
@@ -173,7 +175,8 @@ def run_analysis(db: Session, analysis_id: str, gnomad: GnomadClient | None = No
     except Exception as exc:  # noqa: BLE001 - recorded on the session for the UI
         db.rollback()
         a = db.get(AnalysisSession, analysis_id)
-        a.status, a.error, a.completed_at = "failed", f"{type(exc).__name__}: {exc}", utcnow()
+        from app.utils import user_message
+        a.status, a.error, a.completed_at = "failed", user_message(exc, log), utcnow()
         db.commit()
         log.error("Analysis %s failed: %s\n%s", analysis_id, exc, traceback.format_exc())
     return a
@@ -273,8 +276,9 @@ def variant_to_dict(v: Variant) -> dict:
 
 
 def _load_rows(db: Session, analysis_id: str) -> list[dict]:
-    return [variant_to_dict(v) for v in db.scalars(
-        select(Variant).where(Variant.analysis_id == analysis_id, Variant.provenance == "REAL"))]
+    from app.pipeline import rowcache
+
+    return rowcache.rows(db, ("REAL", analysis_id), Variant.analysis_id == analysis_id, Variant.provenance == "REAL")
 
 
 def load_rows(db: Session, analysis_id: str) -> list[dict]:
@@ -303,10 +307,11 @@ def persist_anomalies(db: Session, analysis_id: str, rows: list[dict], threshold
 def load_synthetic_rows(db: Session, analysis_id: str) -> list[dict]:
     """SYNTHETIC rows from every synthetic job generated from this analysis."""
     from app.models import SyntheticJob
+    from app.pipeline import rowcache
 
     jobs = select(SyntheticJob.id).where(SyntheticJob.source_analysis_id == analysis_id)
-    return [variant_to_dict(v) for v in db.scalars(
-        select(Variant).where(Variant.synthetic_job_id.in_(jobs), Variant.provenance == "SYNTHETIC"))]
+    return rowcache.rows(db, ("SYNTHETIC", analysis_id), Variant.synthetic_job_id.in_(jobs),
+                         Variant.provenance == "SYNTHETIC")
 
 
 def _qc_summary(rows: list[dict]) -> dict:

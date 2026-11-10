@@ -11,12 +11,32 @@ append an instance to ``SOURCES``. Nothing else needs to change.
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 
 from app.config import get_settings
 from app.services.http import request_with_retry
 from app.sources.tracking import record_probe
+
+
+log = logging.getLogger(__name__)
+
+
+def describe_failure(exc: Exception) -> str:
+    """Short, user-facing reason a source check failed (full details are logged)."""
+    import httpx
+
+    from app.services.http import ExternalServiceError
+
+    text = str(exc).lower()
+    if isinstance(exc, httpx.TimeoutException) or "timed out" in text or "timeout" in text:
+        return "No response within 10 seconds – the service may be slow or unreachable from this network."
+    if isinstance(exc, httpx.ConnectError) or "connect" in text or "403" in text and "tunnel" in text:
+        return "Could not connect – the host may be down or blocked by a firewall/proxy on this network."
+    if isinstance(exc, ExternalServiceError) and exc.status_code:
+        return f"The service answered with HTTP {exc.status_code}; it may be temporarily unavailable or rate-limiting."
+    return "The service returned an unexpected response; see the backend log for details."
 
 
 @dataclass
@@ -35,12 +55,18 @@ class SourceAdapter:
         raise NotImplementedError
 
     def check(self) -> dict:
+        from app.services.http import PROBE_MODE
+
+        token = PROBE_MODE.set(True)
         t = time.time()
         try:
             out = self.probe()
             out.setdefault("available", True)
         except Exception as exc:  # noqa: BLE001 - any failure means "unavailable", with the reason
-            out = {"available": False, "detail": f"{type(exc).__name__}: {exc}"[:400], "release": None}
+            log.warning("probe %s failed: %r", self.id, exc)
+            out = {"available": False, "detail": describe_failure(exc), "release": None}
+        finally:
+            PROBE_MODE.reset(token)
         out["latency_ms"] = int((time.time() - t) * 1000)
         record_probe(self.id, out["available"], out.get("detail", ""), out.get("release"), out["latency_ms"])
         return out

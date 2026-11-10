@@ -50,6 +50,14 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     ensure_columns()
+    ensure_indexes()
+
+
+def ensure_indexes() -> None:
+    """Create indexes added after a database was first created (``create_all`` skips existing tables)."""
+    for table in Base.metadata.sorted_tables:
+        for idx in table.indexes:
+            idx.create(bind=engine, checkfirst=True)
 
 
 def ensure_columns() -> None:

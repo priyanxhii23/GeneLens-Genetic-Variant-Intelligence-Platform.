@@ -41,6 +41,8 @@ def generate(req: SyntheticRequest, db: Session = Depends(get_db)):
         payload.append(rec)
     for i in range(0, len(payload), 2000):
         db.execute(insert(Variant), payload[i:i + 2000])
+    from app.pipeline import rowcache
+    rowcache.invalidate()
 
     # Evaluate the anomaly engine against injected ground-truth scenarios.
     screen = detect_anomalies(records, {"use_isolation_forest": False})

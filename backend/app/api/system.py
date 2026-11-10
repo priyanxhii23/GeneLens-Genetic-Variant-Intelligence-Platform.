@@ -1,8 +1,6 @@
 """Health, data sources, dataset registry, gene search/suggestions and variant annotation."""
 from __future__ import annotations
 
-import time
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -12,11 +10,11 @@ from app.database import get_db
 from app.datasets import dataset_status
 from app.models import AnalysisSession, SourceStatus, Variant
 from app.services.http import ExternalServiceError
+from app.utils import user_message
 from app.sources.registry import BY_ID as SOURCE_BY_ID
 from app.sources.registry import SOURCES
 
 router = APIRouter(tags=["system"])
-_probe_cache: dict = {"at": 0.0}
 
 
 @router.get("/health")
@@ -47,22 +45,24 @@ def _source_row(src, db: Session, probe: dict | None = None) -> dict:
 def list_sources(refresh: bool = False, db: Session = Depends(get_db)):
     """All registered connectors with live probe results and usage statistics.
 
-    Probes run at most every 5 minutes unless ``refresh=true``.
+    Probes run in parallel and are cached (stale-while-revalidate, 5 min); ``refresh=true`` forces a check.
     """
-    probes = {}
-    if refresh or time.time() - _probe_cache["at"] > 300:
-        probes = {s.id: s.check() for s in SOURCES}
-        _probe_cache["at"] = time.time()
+    from app.sources.status_cache import get_probes
+
+    probes, _ = get_probes(force=refresh)
     db.expire_all()
     return [_source_row(s, db, probes.get(s.id)) for s in SOURCES]
 
 
 @router.post("/sources/{source_id}/refresh")
 def refresh_source(source_id: str, db: Session = Depends(get_db)):
+    from app.sources.status_cache import update_one
+
     src = SOURCE_BY_ID.get(source_id)
     if src is None:
         raise HTTPException(404, f"Unknown source '{source_id}'")
     probe = src.check()
+    update_one(source_id, probe)
     db.expire_all()
     return _source_row(src, db, probe)
 
@@ -92,13 +92,15 @@ def gene_search(q: str = Query(..., min_length=1, max_length=32), reference_geno
         hits = GnomadClient().search_genes(q, reference_genome)
         return {"query": q, "results": hits[:15], "source": "gnomAD gene_search"}
     except ExternalServiceError as exc:
-        return {"query": q, "results": [], "source": "unavailable", "error": str(exc)}
+        return {"query": q, "results": [], "source": "unavailable", "error": user_message(exc)}
 
 
 @router.get("/genes/suggest")
-def gene_suggest(q: str = "", limit: int = 12, db: Session = Depends(get_db)):
+def gene_suggest(q: str = "", limit: int = 12, live: bool = True, db: Session = Depends(get_db)):
     """Gene suggestions: curated starting genes + local catalogue + live gnomAD search.
 
+    ``live=false`` answers from the local catalogue only (instant); the UI then
+    requests ``live=true`` to append results from gnomAD's gene search.
     Each suggestion reports whether GeneLens already holds data for it (prior
     analyses / offline snapshot) and which datasets are compatible.
     """
@@ -107,7 +109,7 @@ def gene_suggest(q: str = "", limit: int = 12, db: Session = Depends(get_db)):
     analysed = {g: n for g, n in db.execute(
         select(AnalysisSession.gene_symbol, func.count()).where(AnalysisSession.status == "completed")
         .group_by(AnalysisSession.gene_symbol)).all()}
-    return suggest(q, limit, analysed)
+    return suggest(q, limit, analysed, live)
 
 
 @router.get("/variants/{variant_id}/annotation")
@@ -128,10 +130,10 @@ def variant_annotation(variant_id: int, db: Session = Depends(get_db)):
         try:
             out["vep"] = EnsemblClient().vep(v.chrom, v.pos, v.ref, v.alt, genome)
         except ExternalServiceError as exc:
-            out["vep_error"] = str(exc)
+            out["vep_error"] = user_message(exc)
     if v.rsid:
         try:
             out["dbsnp"] = DbSNPClient().refsnp(v.rsid)
         except ExternalServiceError as exc:
-            out["dbsnp_error"] = str(exc)
+            out["dbsnp_error"] = user_message(exc)
     return out

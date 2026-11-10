@@ -17,7 +17,9 @@ Both routes produce identical standardised records (see ``CLINVAR_FIELDS``).
 from __future__ import annotations
 
 import logging
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -152,6 +154,12 @@ def to_grch37(rec: dict) -> dict:
     return out
 
 
+# Shared across clients/threads so concurrent batches still respect NCBI's request-rate policy.
+_THROTTLE_LOCK = threading.Lock()
+_LAST_START = [0.0]
+MAX_IN_FLIGHT = 3
+
+
 class ClinVarClient:
     service = "ClinVar"
     BATCH = 400
@@ -172,10 +180,12 @@ class ClinVarClient:
         return p
 
     def _throttle(self):
-        wait = self.min_interval - (time.monotonic() - self._last)
-        if wait > 0:
-            time.sleep(wait)
-        self._last = time.monotonic()
+        """Space request *starts* by ``min_interval`` (NCBI: ≤3 req/s without key, ≤10 with). Thread-safe."""
+        with _THROTTLE_LOCK:
+            wait = self.min_interval - (time.monotonic() - _LAST_START[0])
+            if wait > 0:
+                time.sleep(wait)
+            _LAST_START[0] = time.monotonic()
 
     def _get(self, endpoint: str, method: str = "GET", **params) -> dict:
         self._throttle()
@@ -218,15 +228,23 @@ class ClinVarClient:
             raise ExternalServiceError(self.service, search["ERROR"])
         total = int(search.get("count", 0))
         webenv, qkey = search.get("webenv"), search.get("querykey")
-        records: list[dict] = []
-        for start in range(0, total, self.BATCH):
+        # Batches are fetched concurrently (≤3 in flight); the shared throttle keeps request
+        # starts within NCBI's rate limit. Results are re-assembled in order.
+        starts = list(range(0, total, self.BATCH))
+        done = [0]
+
+        def fetch(start: int) -> list[dict]:
             body = self._get("esummary.fcgi", method="POST", WebEnv=webenv, query_key=qkey,
                              retstart=start, retmax=self.BATCH)
             result = body.get("result") or {}
-            for uid in result.get("uids", []):
-                records.append(parse_esummary_record(result[uid]))
+            out = [parse_esummary_record(result[uid]) for uid in result.get("uids", [])]
+            done[0] += 1
             if progress:
-                progress(min(1.0, (start + self.BATCH) / max(total, 1)))
+                progress(min(1.0, done[0] / max(len(starts), 1)))
+            return out
+
+        with ThreadPoolExecutor(max_workers=MAX_IN_FLIGHT) as ex:
+            records = [r for batch in ex.map(fetch, starts) for r in batch]
         meta = {
             "retrieved_at": datetime.now(timezone.utc).isoformat(),
             "access_mode": "live_api",

@@ -6,6 +6,7 @@ import tempfile
 
 _TMP = tempfile.mkdtemp(prefix="genelens_test_")
 os.environ["GENELENS_DATA_DIR"] = _TMP
+os.environ["GENELENS_ENVIRONMENT"] = "test"  # no background network warm-up during tests
 
 import pytest  # noqa: E402
 

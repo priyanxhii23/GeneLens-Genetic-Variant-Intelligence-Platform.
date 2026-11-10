@@ -19,6 +19,7 @@ from app.config import get_settings
 from app.database import init_db
 from app.pipeline.matching import AssemblyMismatchError
 from app.services.http import ExternalServiceError
+from app.utils import user_message
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -28,6 +29,10 @@ log = logging.getLogger("genelens")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    if settings.environment != "test":
+        from app.sources.status_cache import warm_up
+
+        warm_up()  # source/dataset checks run in the background so the first page load is fast
     log.info("GeneLens API ready – data dir: %s", settings.data_dir)
     yield
 
@@ -47,7 +52,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 @app.exception_handler(ExternalServiceError)
 async def external_error(_: Request, exc: ExternalServiceError):
     code = 404 if exc.status_code == 404 else 503
-    return JSONResponse(status_code=code, content={"detail": str(exc), "service": exc.service,
+    log.warning("external service error: %s", exc)
+    return JSONResponse(status_code=code, content={"detail": user_message(exc), "service": exc.service,
                                                    "type": "external_service_unavailable" if code == 503 else "not_found"})
 
 

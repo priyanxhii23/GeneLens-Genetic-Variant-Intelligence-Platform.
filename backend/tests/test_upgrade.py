@@ -36,9 +36,12 @@ def test_unreachable_source_reported_honestly(monkeypatch, fake_clients):
     from app.sources.registry import BY_ID as SRC
 
     src = SRC["ucsc"]
-    monkeypatch.setattr(type(src), "probe", lambda self: (_ for _ in ()).throw(ConnectionError("blocked")))
+    import httpx
+
+    monkeypatch.setattr(type(src), "probe", lambda self: (_ for _ in ()).throw(httpx.ConnectError("[Errno -2] blocked")))
     out = src.check()
-    assert out["available"] is False and "blocked" in out["detail"]
+    assert out["available"] is False and out["detail"].startswith("Could not connect")
+    assert "Errno" not in out["detail"]  # raw exception text is logged, never shown
 
 
 # --------------------------------------------------------------------------- GRCh37 ClinVar
@@ -232,8 +235,11 @@ def test_sources_endpoint_reports_stats(client, monkeypatch):
     from app.sources import registry
     from app.sources.tracking import record_retrieval
 
+    from app.sources import status_cache
+
     for s in registry.SOURCES:
         monkeypatch.setattr(type(s), "probe", lambda self: {"detail": "stub", "release": "r1"})
+    monkeypatch.setattr(status_cache, "fetch_gnomad_enum", lambda: {"gnomad_r4"})
     record_retrieval("ensembl", 7)
     rows = {r["id"]: r for r in client.get("/api/sources", params={"refresh": True}).json()}
     assert len(rows) == 7 and rows["ensembl"]["records_retrieved"] >= 7 and rows["ensembl"]["available"]

@@ -16,6 +16,7 @@ from app.schemas import AnalysisRunRequest, AnalysisSummary, DatasetMetaOut
 from app.datasets import BY_ID as DATASET_BY_ID
 from app.services.gnomad_client import GnomadClient
 from app.services.http import ExternalServiceError
+from app.utils import user_message
 from app.utils import json_safe
 
 router = APIRouter(tags=["analysis"])
@@ -53,13 +54,19 @@ PROVENANCE = Query(None, pattern="^(REAL|SYNTHETIC|BOTH)$",
                                "{mode, groups: {REAL?: …, SYNTHETIC?: …}} – groups are always computed separately.")
 
 
-def _rows_for(db: Session, analysis_id: str, provenance: str) -> dict[str, list[dict]]:
-    groups: dict[str, list[dict]] = {}
+def _rows_for(db: Session, analysis_id: str, provenance: str) -> dict:
+    """Lazy row loaders per provenance group – rows are only read when a computation needs them."""
+    groups = {}
     if provenance in ("REAL", "BOTH"):
-        groups["REAL"] = load_rows(db, analysis_id)
+        groups["REAL"] = lambda: load_rows(db, analysis_id)
     if provenance in ("SYNTHETIC", "BOTH"):
-        groups["SYNTHETIC"] = load_synthetic_rows(db, analysis_id)
+        groups["SYNTHETIC"] = lambda: load_synthetic_rows(db, analysis_id)
     return groups
+
+
+def _has_synthetic(db: Session, analysis_id: str) -> bool:
+    jobs = select(SyntheticJob.id).where(SyntheticJob.source_analysis_id == analysis_id)
+    return bool(db.scalar(select(func.count()).select_from(Variant).where(Variant.synthetic_job_id.in_(jobs))))
 
 
 @router.get("/analysis/statistics")
@@ -79,10 +86,13 @@ def statistics(analysis_id: str, include_ambiguous: bool | None = None, provenan
         return json_safe(run_statistics(load_rows(db, analysis_id), include_ambiguous=include_ambiguous, seed=seed))
     amb = stored["sample"]["include_ambiguous"] if include_ambiguous is None else include_ambiguous
     out = {}
-    for name, rows in _rows_for(db, analysis_id, provenance).items():
+    for name, loader in _rows_for(db, analysis_id, provenance).items():
         if name == "REAL" and amb == stored["sample"]["include_ambiguous"]:
-            out[name] = stored
+            out[name] = stored  # pre-computed at analysis time – no rows needed
+        elif name == "SYNTHETIC" and not _has_synthetic(db, analysis_id):
+            out[name] = None
         else:
+            rows = loader()
             out[name] = run_statistics(rows, include_ambiguous=amb, seed=seed) if rows else None
     return json_safe({"mode": provenance, "groups": out})
 
@@ -93,8 +103,14 @@ def populations(analysis_id: str, provenance: str | None = PROVENANCE, db: Sessi
     if provenance is None:
         return a.results["populations"]
     out = {}
-    for name, rows in _rows_for(db, analysis_id, provenance).items():
-        out[name] = a.results["populations"] if name == "REAL" else (population_summary(rows) if rows else None)
+    for name, loader in _rows_for(db, analysis_id, provenance).items():
+        if name == "REAL":
+            out[name] = a.results["populations"]  # pre-computed – no rows needed
+        elif not _has_synthetic(db, analysis_id):
+            out[name] = None
+        else:
+            rows = loader()
+            out[name] = population_summary(rows) if rows else None
     return json_safe({"mode": provenance, "groups": out})
 
 
@@ -119,7 +135,7 @@ def constraint_compare(genes: str = Query(..., description="Comma-separated symb
                         "metrics": c, "access_mode": meta.get("access_mode"),
                         "retrieved_at": meta.get("retrieved_at")})
         except ExternalServiceError as exc:
-            out.append({"symbol": s, "available": False, "error": str(exc)})
+            out.append({"symbol": s, "available": False, "error": user_message(exc)})
     return {"reference_genome": reference_genome, "genes": out,
             "docs": interpret_constraint({"pli": 0}).get("docs")}
 

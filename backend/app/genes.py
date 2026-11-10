@@ -88,7 +88,7 @@ def _entry(symbol: str, analysed: dict[str, int], starter: bool) -> dict:
             "compatible_datasets": _compatible(chrom), "in_catalogue": symbol in CATALOGUE}
 
 
-def suggest(q: str, limit: int, analysed: dict[str, int]) -> dict:
+def suggest(q: str, limit: int, analysed: dict[str, int], use_live: bool = True) -> dict:
     q = (q or "").strip().upper()
     if not q:
         return {"query": "", "results": [_entry(s, analysed, True) for s in STARTERS], "live_search": None}
@@ -96,7 +96,7 @@ def suggest(q: str, limit: int, analysed: dict[str, int]) -> dict:
     local += [s for s, (n, _, d) in CATALOGUE.items() if s not in local and (q in n.upper() or q in d.upper())]
     results = [_entry(s, analysed, s in STARTERS) for s in local[:limit]]
     live = None
-    if len(results) < limit:
+    if use_live and len(results) < limit:
         from app.services.gnomad_client import GnomadClient
         from app.services.http import ExternalServiceError
 

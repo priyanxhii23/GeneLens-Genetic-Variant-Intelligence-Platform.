@@ -92,10 +92,13 @@ class DbSNPClient:
         self._last = 0.0
 
     def _eutils(self, endpoint: str, method="GET", **params) -> dict:
-        wait = self.min_interval - (time.monotonic() - self._last)
-        if wait > 0:
-            time.sleep(wait)
-        self._last = time.monotonic()
+        from app.services.clinvar_client import _LAST_START, _THROTTLE_LOCK
+
+        with _THROTTLE_LOCK:  # same NCBI rate limit as ClinVar – one shared throttle
+            wait = self.min_interval - (time.monotonic() - _LAST_START[0])
+            if wait > 0:
+                time.sleep(wait)
+            _LAST_START[0] = time.monotonic()
         p = {"db": "snp", "retmode": "json", "tool": "genelens", **params}
         if self.settings.ncbi_api_key:
             p["api_key"] = self.settings.ncbi_api_key
@@ -119,14 +122,22 @@ class DbSNPClient:
         s = self._eutils("esearch.fcgi", term=f"{symbol}[gene]", usehistory="y", retmax=0)["esearchresult"]
         total = int(s.get("count", 0))
         n = min(total, MAX_RECORDS)
-        docs = []
-        for start in range(0, n, 400):
+        starts = list(range(0, n, 400))
+        done = [0]
+
+        def fetch(start: int) -> list[dict]:
             body = self._eutils("esummary.fcgi", method="POST", WebEnv=s["webenv"], query_key=s["querykey"],
                                 retstart=start, retmax=min(400, n - start))
             res = body.get("result") or {}
-            docs += [res[u] for u in res.get("uids", [])]
+            done[0] += 1
             if progress:
-                progress(min(1.0, (start + 400) / max(n, 1)))
+                progress(min(1.0, done[0] / max(len(starts), 1)))
+            return [res[u] for u in res.get("uids", [])]
+
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            docs = [d for batch in ex.map(fetch, starts) for d in batch]
         info = self.info()
         meta = {"retrieved_at": datetime.now(timezone.utc).isoformat(), "access_mode": "live_api",
                 "dataset": "dbsnp_refsnp", "release": f"dbSNP {info['build']} (updated {info['last_update']})",
