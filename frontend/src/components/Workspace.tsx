@@ -46,7 +46,7 @@ export default function Workspace() {
         </header>
         <AnimatePresence mode="wait">
           <motion.main key={pathname} initial={{ opacity: 0, y: 10, filter: "blur(4px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="relative mx-auto max-w-[1440px] px-4 py-8 md:px-8">
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} className="page relative">
             <Outlet />
           </motion.main>
         </AnimatePresence>

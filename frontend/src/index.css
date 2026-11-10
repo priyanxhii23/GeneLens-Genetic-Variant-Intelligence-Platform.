@@ -8,6 +8,19 @@
    with the dataviz palette validator (light + dark surfaces).
    gold = REAL-data identification · pink = SYNTHETIC-data identification
 ------------------------------------------------------------------- */
+:root {
+  /* ---- layout tokens (shared by both themes) ---- */
+  --page-max: 1440px;
+  --page-pad: clamp(1rem, 2.4vw, 2rem);
+  --section-gap: 1.5rem;
+  --grid-gap: 1.25rem;
+  --card-pad: 1.25rem;
+  --radius-card: 1rem;
+  --radius-control: 0.75rem;
+  --control-h: 2.5rem;
+  --aside-w: minmax(320px, 400px);
+}
+
 :root,
 :root[data-theme="light"] {
   color-scheme: light;
@@ -75,7 +88,8 @@ h1, h2, h3 { font-family: "DM Serif Display", Georgia, serif; font-weight: 400; 
 
 @layer components {
   .panel {
-    @apply relative rounded-2xl border border-line bg-surface/85 backdrop-blur-sm;
+    @apply relative border border-line bg-surface/85 backdrop-blur-sm;
+    border-radius: var(--radius-card);
     transition: background-color 0.45s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
   }
   /* dimensional surface: hairline highlight on top edge */
@@ -94,6 +108,7 @@ h1, h2, h3 { font-family: "DM Serif Display", Georgia, serif; font-weight: 400; 
   .meta { @apply text-[12.5px] text-faint; }
 
   .btn {
+    min-height: var(--control-h);
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-[14.5px] font-semibold
            transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60
            disabled:cursor-not-allowed disabled:opacity-50;
@@ -101,6 +116,7 @@ h1, h2, h3 { font-family: "DM Serif Display", Georgia, serif; font-weight: 400; 
   .btn-primary { @apply btn bg-accent text-bg hover:shadow-glow hover:-translate-y-px active:translate-y-0; }
   .btn-ghost { @apply btn border border-line bg-raised/60 text-ink hover:border-accent/50 hover:text-accent; }
   .input {
+    min-height: var(--control-h);
     @apply w-full rounded-xl border border-line bg-raised/70 px-3 py-2 text-[14.5px] text-ink placeholder:text-faint
            transition-shadow focus:border-accent/60 focus:outline-none focus:shadow-glow-sm;
   }
@@ -108,6 +124,21 @@ h1, h2, h3 { font-family: "DM Serif Display", Georgia, serif; font-weight: 400; 
   .data { @apply font-mono tabular-nums; }
   .table-head { @apply eyebrow sticky top-0 z-10 bg-surface px-3 py-2.5 text-left font-normal; }
   .table-cell { @apply border-t border-line/70 px-3 py-2.5 text-[14px]; }
+
+  /* ---- shared page layouts: every module composes these, so widths/gaps are identical everywhere ---- */
+  .page { @apply mx-auto w-full; max-width: var(--page-max); padding: 2rem var(--page-pad); }
+  .stack { display: flex; flex-direction: column; gap: var(--section-gap); }
+  .layout-aside, .layout-split, .layout-halves, .layout-metrics, .layout-cards { display: grid; gap: var(--grid-gap); align-items: stretch; }
+  .layout-aside { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .layout-split, .layout-halves { grid-template-columns: minmax(0, 1fr); }
+  .layout-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .layout-cards { grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+  @media (min-width: 768px) { .layout-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (min-width: 1024px) {
+    .layout-split { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+    .layout-halves { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (min-width: 1280px) { .layout-aside { grid-template-columns: var(--aside-w) minmax(0, 1fr); } }
 
   /* ---- explanation typography (Part 4) ---- */
   .insight-reason { @apply text-[18px] font-semibold leading-[1.5] text-ink; }

@@ -72,7 +72,7 @@ export default function SyntheticLab() {
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
       <PageHeader index="08" title="Synthetic Genome Data Lab"
         subtitle="A reproducible, seeded generator that samples from distributions estimated from real data – class mix, a Gaussian mixture over log10 AF, allele-number and population structure – without copying any real variant. Every record is permanently labelled SYNTHETIC." />
-      <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
+      <div className="layout-aside">
         <Panel eyebrow="generator" title="Configure simulation" className="border-pink/40 shadow-glow-pink">
           <div className="space-y-4">
             <div>
@@ -130,7 +130,7 @@ export default function SyntheticLab() {
                 </div>
               </Panel>
               {dist ? (
-                <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+                <div className="layout-split">
                   <Panel eyebrow="real vs synthetic" title="log10 AF distribution" actions={<select className="input !w-auto !py-1 text-xs" value={cls} onChange={(e) => setCls(e.target.value)} aria-label="Class">{MAIN_CLASSES.map((c) => <option key={c} value={c}>{CLASS_META[c].short}</option>)}</select>}>
                     <Plot data={overlay} height={300} layout={{ xaxis: { title: { text: "log10(allele frequency)" } }, yaxis: { title: { text: "share of class" }, tickformat: ".0%" } }} />
                     <p className="text-xs text-faint">KS statistic: <span className="data">{fmtNum(dist.classes[cls]?.ks?.statistic ?? null)}</span> (0 = identical distributions). {dist.explanation}</p>

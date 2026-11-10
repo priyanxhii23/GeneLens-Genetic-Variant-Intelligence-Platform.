@@ -6,7 +6,7 @@ import DatasetPicker from "../../components/DatasetPicker";
 import GeneCombobox, { rememberGene } from "../../components/GeneCombobox";
 import Plot from "../../components/Plot";
 import { Disclaimer, ErrorState, HelixLoader, Insight, Metric, PageHeader, Panel, Skeleton, stagger, Term } from "../../components/ui";
-import { api } from "../../lib/api";
+import { api, clearApiCache } from "../../lib/api";
 import { useAnalysis, useFetch } from "../../lib/analysis";
 import { CLASS_META, fmtDate, fmtInt, MATCH_LABELS, pct, token } from "../../lib/format";
 import { useProvenance } from "../../lib/provenance";
@@ -127,6 +127,7 @@ export default function CommandCenter() {
   }, [g]);
 
   const onDone = (a: AnalysisSummary) => {
+    clearApiCache();  // a finished analysis changes dashboards, history and dataset badges
     setRunning(null);
     if (a.status === "completed") { select(a.id); void refresh(); }
     dash.reload();
@@ -143,7 +144,7 @@ export default function CommandCenter() {
       <PageHeader index="01" title="Genomic Command Center"
         subtitle="Launch analyses, choose among ten datasets and seven integrated sources, and monitor the loaded data. Every number here is computed from records stored in the GeneLens database." />
 
-      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+      <div className="layout-aside">
         <div className="space-y-6">
           {running ? <RunProgress run={running} onDone={onDone} /> : <GeneLauncher onStarted={setRunning} />}
           <Panel eyebrow="integrated sources" title="Source status" actions={<Link to="/workspace/sources" className="text-[13px] font-semibold text-accent hover:underline">Manage <ArrowRight size={12} className="inline" /></Link>}>
@@ -168,7 +169,7 @@ export default function CommandCenter() {
               <p>The pipeline retrieves <b>population frequencies</b> (or a variant catalogue) and <b>ClinVar classifications</b>, matches them allele by allele, runs statistics and anomaly screening, and stores everything for the other modules. <b>HBB</b> with gnomAD v4 completes in under a minute.</p>
             </Insight>
           )}
-          {dash.loading && !m && <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28" />)}</div>}
+          {dash.loading && !m && <div className="layout-metrics">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28" />)}</div>}
           {m && primary !== undefined && dash.data?.analysis && (
             <>
               {mode !== "REAL" && !syn?.total_records && (
@@ -176,7 +177,7 @@ export default function CommandCenter() {
                   <p>Generate a dataset in the <Link to="/workspace/synthetic" className="font-semibold text-pink underline">Synthetic Lab</Link> to populate the synthetic view. Real records are unaffected.</p>
                 </Insight>
               )}
-              <motion.div variants={stagger} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <motion.div variants={stagger} className="layout-metrics">
                 <Metric label={`${mode === "SYNTHETIC" ? "Synthetic" : freqLabel} records`} value={primary?.gnomad_variants ?? 0} value2={mode === "BOTH" ? syn?.gnomad_variants : undefined} icon={<Database size={14} />} hint={detail?.results?.dataset?.name ?? dash.data.analysis.dataset} />
                 <Metric label="ClinVar records" value={primary?.clinvar_records ?? 0} value2={mode === "BOTH" ? syn?.clinvar_records : undefined} icon={<Database size={14} />} tone="accent2" hint="germline classifications" />
                 <Metric label="Matched alleles" value={primary?.matched ?? 0} value2={mode === "BOTH" ? syn?.matched : undefined} icon={<Split size={14} />} tone="violet" glow hint={mode === "SYNTHETIC" ? "generated as matched pairs" : `${pct(dash.data.matching?.clinvar_match_rate)} of ClinVar with coordinates`} />
@@ -187,7 +188,7 @@ export default function CommandCenter() {
                 <Metric label="Conflicting" value={primary?.conflicting ?? 0} value2={mode === "BOTH" ? syn?.conflicting : undefined} tone="conf" hint="submitters disagree" />
               </motion.div>
 
-              <div className="grid gap-6 lg:grid-cols-2">
+              <div className="layout-halves">
                 <Panel eyebrow={`${dash.data.analysis.gene_symbol} · ${mode === "BOTH" ? "REAL vs SYNTHETIC" : mode}`} title="Classification mix">
                   <Plot data={classData} height={280} layout={{ margin: { l: 90, r: 60, t: mode === "BOTH" ? 36 : 8, b: 36 }, xaxis: { title: { text: "records" } }, showlegend: mode === "BOTH", barmode: "group" }} />
                 </Panel>
@@ -228,7 +229,7 @@ export default function CommandCenter() {
                 </Panel>
               )}
 
-              <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+              <div className="layout-split">
                 <Panel eyebrow="provenance" title="Loaded datasets">
                   <div className="overflow-x-auto scrollbar-thin">
                     <table className="w-full min-w-[560px]">

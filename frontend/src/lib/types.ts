@@ -1,4 +1,4 @@
-export type Provenance = "REAL" | "SYNTHETIC";
+export type Provenance = "REAL" | "SYNTHETIC" | "CUSTOM";
 export type CoarseClass = "P_LP" | "VUS" | "B_LB" | "CONFLICTING" | "OTHER" | "NOT_IN_CLINVAR";
 
 export interface AnalysisSummary {
@@ -27,6 +27,7 @@ export interface VariantDetail extends VariantRow {
   last_evaluated: string | null; match_method: string | null; gnomad_filters: string[] | null;
   gnomad_flags: string[] | null; clinvar_allele_id: string | null;
   anomalies: AnomalyFlag[]; links?: { gnomad?: string; clinvar?: string };
+  assembly?: string; frequency_source?: string | null;
 }
 export interface Page<T> { total: number; page: number; page_size: number; pages?: number; items: T[] }
 export interface Describe { n: number; mean?: number; median?: number; std?: number | null; min?: number; max?: number; q1?: number; q3?: number; iqr?: number; log10?: Describe }

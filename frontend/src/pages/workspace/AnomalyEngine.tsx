@@ -113,7 +113,7 @@ export default function AnomalyEngine() {
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
       <PageHeader index="06" title="Variant Anomaly Detection Engine"
         subtitle="Three screening layers – configurable rules, robust within-class outliers and an Isolation Forest – each flag explained in plain language with a recommended next step." />
-      <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
+      <div className="layout-aside">
         <Panel eyebrow="configuration" title="Screening thresholds">
           <div className="space-y-3">
             {FIELDS.map((f) => (
@@ -133,7 +133,7 @@ export default function AnomalyEngine() {
         </Panel>
         <div className="space-y-6">
           {summary && (
-            <motion.div variants={stagger} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <motion.div variants={stagger} className="layout-metrics">
               <Metric label="Total flags" value={summary.total} />
               <Metric label="Flagged variants" value={summary.flagged_variants} tone="violet" />
               <Metric label="High priority" value={summary.by_priority.high ?? 0} tone="bad" />
@@ -182,7 +182,7 @@ export default function AnomalyEngine() {
         <GuideItem term="Rule-based screening">Explicit, adjustable criteria – for example "a <Term k="P/LP">P/LP</Term> variant with <Term k="AF">AF</Term> ≥ 0.5%". Change the thresholds on the left and press <b>Run screening</b>.</GuideItem>
         <GuideItem term={<>Robust outliers and <Term k="Isolation Forest">Isolation Forest</Term></>}>Outliers use the median and <Term k="MAD">MAD</Term> of log-frequency within each class, which extreme values cannot distort. The Isolation Forest is a seeded machine-learning model that finds uncommon combinations of features.</GuideItem>
         <GuideItem term="What not to conclude">A flag is <b>never</b> a statement that a variant is misclassified. Example: the sickle-cell allele is pathogenic yet common in some populations because carriers are protected against malaria (balancing selection).</GuideItem>
-        <GuideItem term="Where is the raw evidence?">The exact values and thresholds behind each flag remain available under <b>Technical evidence</b> in the full variant details.</GuideItem>
+        <GuideItem term="Where are the numbers behind a flag?">Each card states the values and thresholds that triggered it in plain language. Open <b>Full variant details</b> to see every field of the record – frequencies, counts, classification, review status and how it was matched.</GuideItem>
       </Guide>
       <Disclaimer compact />
       <VariantDrawer id={open} onClose={() => setOpen(null)} />

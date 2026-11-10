@@ -23,31 +23,63 @@ export function qs(params: Query = {}): string {
   return s ? `?${s}` : "";
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+// ---------------------------------------------------------------------------
+// Request de-duplication + short-lived response cache (GET only).
+// * Identical GETs in flight share one network request (pages, StrictMode
+//   double-mounts and sibling components no longer fire duplicates).
+// * Successful GETs are reused for a short TTL so navigating back is instant.
+// * Any write (POST/PATCH/DELETE) clears the cache, so data is never stale.
+// ---------------------------------------------------------------------------
+const inflight = new Map<string, Promise<unknown>>();
+const cache = new Map<string, { at: number; data: unknown }>();
+const ttlFor = (path: string) =>
+  /^\/(datasets|sources)/.test(path) ? 60_000 : /status|\/custom-datasets/.test(path) ? 0 : 20_000;
+export function clearApiCache() { cache.clear(); }
+
+async function rawRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`/api${path}`, { headers: { "Content-Type": "application/json" }, ...init });
+    res = await fetch(`/api${path}`, { headers: init?.body instanceof FormData ? undefined : { "Content-Type": "application/json" }, ...init });
   } catch {
-    throw new ApiError("Cannot reach the GeneLens backend. Is it running on port 8000? (see README → Run)", 0);
+    throw new ApiError("Cannot reach the GeneLens backend. Is it running on port 8000? (see README → Troubleshooting)", 0);
   }
   if (!res.ok) {
-    let msg = `${res.status} ${res.statusText}`;
-    try { const body = await res.json(); msg = body.detail ?? msg; } catch { /* non-JSON */ }
-    throw new ApiError(typeof msg === "string" ? msg : JSON.stringify(msg), res.status);
+    let msg = `The server answered ${res.status} ${res.statusText}`;
+    try { const body = await res.json(); if (typeof body.detail === "string") msg = body.detail; } catch { /* non-JSON */ }
+    throw new ApiError(msg, res.status);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (method !== "GET") {
+    const out = await rawRequest<T>(path, init);
+    cache.clear();
+    return out;
+  }
+  const ttl = ttlFor(path);
+  const hit = cache.get(path);
+  if (hit && Date.now() - hit.at < ttl) return hit.data as T;
+  const pending = inflight.get(path);
+  if (pending) return pending as Promise<T>;
+  const p = rawRequest<T>(path, init)
+    .then((data) => { if (ttl > 0) cache.set(path, { at: Date.now(), data }); return data; })
+    .finally(() => inflight.delete(path));
+  inflight.set(path, p);
+  return p;
 }
 
 const post = <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
 
 export const api = {
   health: () => request<{ status: string; analyses: number }>("/health"),
-  sources: (refresh = false) => request<SourceStatus>(`/sources/status${qs({ refresh })}`),
-  datasets: (refresh = false) => request<DatasetEntry[]>(`/datasets${qs({ refresh })}`),
-  sourceList: (refresh = false) => request<SourceEntry[]>(`/sources${qs({ refresh })}`),
+  sources: (refresh = false) => request<SourceStatus>(`/sources/status${qs({ refresh: refresh || undefined })}`),
+  datasets: (refresh = false) => request<DatasetEntry[]>(`/datasets${qs({ refresh: refresh || undefined })}`),
+  sourceList: (refresh = false) => request<SourceEntry[]>(`/sources${qs({ refresh: refresh || undefined })}`),
   refreshSource: (id: string) => request<SourceEntry>(`/sources/${id}/refresh`, { method: "POST" }),
-  suggestGenes: (q: string) => request<{ query: string; results: GeneSuggestion[]; live_search: string | null }>(`/genes/suggest${qs({ q })}`),
+  suggestGenes: (q: string, live = true) => request<{ query: string; results: GeneSuggestion[]; live_search: string | null }>(`/genes/suggest${qs({ q, live: live ? undefined : false })}`),
   annotation: (id: number) => request<Annotation>(`/variants/${id}/annotation`),
   statisticsFor: (analysis_id: string, provenance: ProvMode, include_ambiguous?: boolean) =>
     request<Groups<Statistics>>(`/analysis/statistics${qs({ analysis_id, provenance, include_ambiguous })}`),

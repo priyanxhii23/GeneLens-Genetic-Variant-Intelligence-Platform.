@@ -1,12 +1,34 @@
 /** Analysis history & provenance (formerly the standalone History page) – embedded in the Report Generator. */
 import { AnimatePresence, motion } from "framer-motion";
 import { FolderOpen, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ErrorState, HelixLoader, Panel } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAnalysis, useFetch } from "../../lib/analysis";
 import { fmtDate, fmtInt } from "../../lib/format";
+
+const LABELS: Record<string, string> = {
+  include_ambiguous: "Ambiguous matches included in statistics", seed: "Random seed",
+  anomaly_thresholds: "Anomaly thresholds", pathogenic_af: "P/LP frequency threshold", pathogenic_popmax_af: "P/LP population threshold",
+  ba1_af: "BA1 threshold", rare_benign_af: "Rare-benign threshold", low_an_fraction: "Low-AN fraction", mad_z: "Robust z cut-off",
+  use_isolation_forest: "Isolation Forest", isolation_contamination: "Isolation Forest contamination",
+};
+const show = (v: unknown) => (v === null || v === undefined ? "defaults" : typeof v === "boolean" ? (v ? "yes" : "no") : String(v));
+
+/** Analysis parameters as a readable list (no raw JSON). */
+function ParameterList({ params }: { params: Record<string, unknown> }) {
+  const rows: [string, string][] = [];
+  for (const [k, v] of Object.entries(params ?? {})) {
+    if (v && typeof v === "object") for (const [k2, v2] of Object.entries(v as Record<string, unknown>)) rows.push([LABELS[k2] ?? k2, show(v2)]);
+    else rows.push([LABELS[k] ?? k, show(v)]);
+  }
+  return (
+    <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-lg bg-surface/70 p-3 text-[12.5px]">
+      {rows.map(([k, v]) => <Fragment key={k}><dt className="text-muted">{k}</dt><dd className="data text-right">{v}</dd></Fragment>)}
+    </dl>
+  );
+}
 
 export default function ProvenanceHistory() {
   const { analysisId, select } = useAnalysis();
@@ -63,7 +85,7 @@ export default function ProvenanceHistory() {
                             <li key={i} className="rounded-lg bg-surface/70 p-2"><b>{d.source}</b> · {d.release} · {d.access_mode} · {fmtInt(d.record_count)} records<br />
                               <span className="text-faint">retrieved {fmtDate(d.retrieved_at)} · {d.query}</span></li>))}</ul>
                           <div className="eyebrow mb-2 mt-4">parameters</div>
-                          <pre className="overflow-x-auto rounded-lg bg-bg/60 p-3 font-mono text-[11.5px] text-muted scrollbar-thin">{JSON.stringify(det.data.analysis.parameters, null, 2)}</pre>
+                          <ParameterList params={det.data.analysis.parameters} />
                         </div>
                         <div>
                           <div className="eyebrow mb-2">exports</div>

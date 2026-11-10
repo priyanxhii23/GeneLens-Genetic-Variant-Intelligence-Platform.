@@ -20,6 +20,30 @@ function Contingency({ t }: { t: { rows: string[]; columns: string[]; counts: nu
   );
 }
 
+type Normality = { test: string; applicable: boolean; reason?: string; W?: number; p_value?: number; "normal_at_0.05"?: boolean; n_tested?: number };
+
+/** Assumption checks as readable sentences (no raw objects). */
+function Assumptions({ a }: { a: Record<string, unknown> }) {
+  const items: string[] = [];
+  const norm = a.normality as Record<string, Normality> | undefined;
+  if (norm) for (const [g, n] of Object.entries(norm)) {
+    items.push(n.applicable ? `Normality, ${g}: ${n["normal_at_0.05"] ? "consistent with a normal distribution" : "not normal"} (Shapiro–Wilk p = ${fmtP(n.p_value)}, n = ${fmtInt(n.n_tested)}).`
+      : `Normality, ${g}: not testable (${n.reason}).`);
+  }
+  if (typeof a.equal_spread_levene_p === "number") items.push(`Equal spread between groups (Levene): p = ${fmtP(a.equal_spread_levene_p as number)}${(a.equal_spread_levene_p as number) < 0.05 ? " – spreads differ, so the result compares whole distributions, not only medians" : ""}.`);
+  if (typeof a.why_nonparametric === "string") items.push(a.why_nonparametric as string);
+  if (typeof a.independent_observations === "string") items.push(`Independence: ${a.independent_observations}`);
+  if (typeof a.expected_counts_ge_5_fraction === "number") items.push(`${Math.round((a.expected_counts_ge_5_fraction as number) * 100)}% of expected counts are ≥ 5 – ${a.assumption_met ? "the chi-square approximation is appropriate" : "too few; rely on Fisher's exact test instead"} (${a.rule}).`);
+  if (typeof a.note === "string") items.push(a.note as string);
+  if (!items.length) return null;
+  return (
+    <details className="mt-3 rounded-xl border border-line/70 bg-raised/40 p-3 text-[13.5px]">
+      <summary className="cursor-pointer font-semibold text-muted">Assumption checks</summary>
+      <ul className="mt-2 space-y-1.5 text-muted">{items.map((x) => <li key={x} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-accent" /><span>{x}</span></li>)}</ul>
+    </details>
+  );
+}
+
 function TestCard({ t }: { t: StatTest }) {
   const sig = t["significant_fdr_0.05"];
   const n = typeof t.n === "object" ? Object.entries(t.n).map(([k, v]) => `${k} ${v}`).join(" · ") : t.n !== undefined ? `n = ${fmtInt(t.n)}` : "";
@@ -50,10 +74,7 @@ function TestCard({ t }: { t: StatTest }) {
           {t.warning && <p className="mt-2 text-xs text-warn">{t.warning}</p>}
           {(t.contingency_table || t.table) && <Contingency t={(t.contingency_table ?? t.table)!} />}
           <p className="insight-detail mt-3">{t.explanation}</p>
-          {t.assumptions && (
-            <details className="mt-2 text-xs"><summary className="cursor-pointer text-faint">assumption checks</summary>
-              <pre className="mt-2 overflow-x-auto rounded-lg bg-bg/60 p-3 font-mono text-[11px] text-muted scrollbar-thin">{JSON.stringify(t.assumptions, (_, v) => (typeof v === "number" ? Number(v.toPrecision(4)) : v), 2)}</pre></details>
-          )}
+          {t.assumptions && <Assumptions a={t.assumptions} />}
         </>
       )}
     </motion.div>
@@ -108,7 +129,7 @@ export default function StatisticsStudio() {
               <div key={l as string} className="panel p-4"><div className="eyebrow">{l}</div><div className="data mt-1 text-[28px]">{fmtInt(v as number)}</div></div>
             ))}
           </div>
-          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+          <div className="layout-split">
             <Panel eyebrow="distribution" title="Cumulative distribution of log10 AF">
               <Plot data={ecdf} height={340} layout={{ xaxis: { title: { text: "log10(allele frequency)" } }, yaxis: { title: { text: "cumulative share" }, tickformat: ".0%" }, hovermode: "closest" }} />
               <p className="meta">Curves further right = more frequent variants. Mann–Whitney asks whether one curve sits systematically to the right of another.{mode === "BOTH" ? " Dashed = synthetic." : ""}</p>

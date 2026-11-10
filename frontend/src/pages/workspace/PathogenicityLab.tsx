@@ -89,7 +89,7 @@ export default function PathogenicityLab() {
           <p>Each <b>median</b> is the middle frequency of variants in that class that were found in the frequency dataset ({fmtInt(d.P_LP?.n)} P/LP and {fmtInt(d.B_LB?.n)} B/LB variants). Pathogenic variants for rare diseases are usually rare, so benign variants often have higher frequencies – but because <b>frequency is itself evidence used to classify variants</b>, part of this difference is built in by design. Whether the difference is statistically meaningful is tested in the <Link to="/workspace/statistics" className="font-semibold text-accent underline">Statistics Studio</Link>.</p>
         </Insight>
       )}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="layout-halves">
         <Panel eyebrow={`ClinVar classifications · ${mode.toLowerCase()}`} title="Classification distribution">
           <Plot data={fineBar} height={340} layout={{ margin: { l: 190, r: 60, t: mode === "BOTH" ? 36 : 8, b: 36 }, showlegend: mode === "BOTH", barmode: "group", xaxis: { title: { text: "records" } } }} />
         </Panel>
@@ -122,7 +122,7 @@ export default function PathogenicityLab() {
         </Panel>
       ))}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="layout-halves">
         <Panel eyebrow="review status · real data" title="ClinVar review stars by class">
           {mode === "SYNTHETIC" ? <p className="text-muted">Synthetic records carry no review stars – GeneLens never fabricates clinical evidence.</p>
             : <Plot data={reviewBars} height={290} layout={{ barmode: "stack", bargap: 0.35, yaxis: { title: { text: "share of records" }, tickformat: ".0%" } }} />}

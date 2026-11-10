@@ -5,7 +5,7 @@ import DatasetPicker from "../../components/DatasetPicker";
 import GeneCombobox from "../../components/GeneCombobox";
 import Plot from "../../components/Plot";
 import { Counter, ErrorState, Guide, GuideItem, HelixLoader, Insight, PageHeader, Panel, Skeleton, stagger, Term } from "../../components/ui";
-import { api } from "../../lib/api";
+import { api, clearApiCache } from "../../lib/api";
 import { useFetch } from "../../lib/analysis";
 import { CLASS_META, fmtAF, fmtDate, fmtInt, fmtNum, MAIN_CLASSES, token } from "../../lib/format";
 import type { AnalysisSummary, CompareGene, CompareParams, WhatIfResult, WhatIfThresholds } from "../../lib/types";
@@ -82,7 +82,7 @@ export default function GeneComparisonLab() {
       const next = await Promise.all(ids.map((a) => api.status(a.id).catch(() => a)));
       const pending = Object.fromEntries(next.filter((a) => a.status === "queued" || a.status === "running").map((a) => [a.gene_symbol, a]));
       setRunning(pending);
-      if (Object.keys(pending).length < ids.length) void compute();
+      if (Object.keys(pending).length < ids.length) { clearApiCache(); void compute(); }
     }, 1500);
     return () => window.clearInterval(t);
   }, [running]); // eslint-disable-line
@@ -146,7 +146,7 @@ export default function GeneComparisonLab() {
         subtitle="Compare 2–5 genes side by side, explore how filters change the picture, and run what-if screening scenarios. Every number is recalculated from stored REAL records."
         actions={<><button className="btn-ghost" onClick={exportCurrent} disabled={!data}><Download size={15} />Export CSV</button></>} />
 
-      <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
+      <div className="layout-aside">
         <div className="space-y-6">
           <Panel eyebrow="1 · genes" title="Select 2–5 genes">
             <div className="mb-3 flex flex-wrap gap-2">
@@ -238,7 +238,7 @@ export default function GeneComparisonLab() {
                   </motion.div>
                 ))}
               </motion.div>
-              <div className="grid gap-6 lg:grid-cols-2">
+              <div className="layout-halves">
                 <Panel eyebrow="classifications" title="ClinVar classes per gene"><Plot data={classChart} height={300} config={plotCfg("classes")} layout={{ barmode: "group", bargap: 0.25, yaxis: { title: { text: "records" } } }} /></Panel>
                 <Panel eyebrow="frequency" title="Allele frequency distribution"><Plot data={distChart} height={300} config={plotCfg("af_distribution")} layout={{ xaxis: { title: { text: `log10(AF)${pops.length ? ` · ${pops.join("+")}` : ""}` } }, yaxis: { title: { text: "share of matched variants" }, tickformat: ".0%" },
                   shapes: [{ type: "line", x0: Math.log10(afT), x1: Math.log10(afT), yref: "paper", y0: 0, y1: 1, line: { color: token("accent"), dash: "dot", width: 1.5 } }] }} /></Panel>

@@ -105,7 +105,7 @@ export default function SourceManager() {
       )}
       {src.error && <ErrorState message={src.error} onRetry={src.reload} />}
       {!src.data && src.loading && <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-72" />)}</div>}
-      <motion.div variants={stagger} className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <motion.div variants={stagger} className="layout-cards">
         <AnimatePresence>
           {src.data?.map((s) => <SourceCard key={s.id} s={s} onRefreshed={(n) => src.setData(src.data!.map((x) => (x.id === n.id ? n : x)))} />)}
         </AnimatePresence>

@@ -78,7 +78,7 @@ export default function ConstraintObservatory() {
             <Scale label="LOEUF" value={num("oe_lof_upper")} min={0} max={2} threshold={0.6} lowGood hint="Upper 90% bound of LoF o/e; lower = more constrained (v4 guidance < 0.6)." />
             <Scale label="Missense Z" value={num("mis_z")} min={-4} max={8} threshold={3.09} hint="Positive = fewer missense than expected; ≥ 3.09 often called constrained." />
           </div>
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="layout-halves">
             <Panel eyebrow="observed / expected with 90% CI" title="Constraint ratios">
               <Plot data={oe} height={260} layout={{ xaxis: { title: { text: "observed / expected" }, rangemode: "tozero" }, showlegend: false,
                 shapes: [{ type: "line", x0: 1, x1: 1, yref: "paper", y0: 0, y1: 1, line: { color: token("faint"), dash: "dot", width: 1 } }] }} />

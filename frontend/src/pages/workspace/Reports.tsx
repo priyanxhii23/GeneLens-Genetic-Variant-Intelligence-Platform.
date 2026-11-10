@@ -33,7 +33,7 @@ export default function Reports() {
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
       <PageHeader index="09" title="Research Report Generator" subtitle={`Generate downloadable reports for ${detail?.analysis.gene_symbol ?? "the active analysis"}. Every sentence in the interpretation is derived from a computed value – no invented conclusions.`} />
       {!analysisId && <Insight label="No analysis selected" reason="Select or reopen an analysis below to generate its report."><p>Reports are built from a completed analysis. The history below lists every analysis stored in this installation.</p></Insight>}
-      {analysisId && <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+      {analysisId && <div className="layout-split">
         <div className="space-y-4">
           {[{ f: "pdf" as const, icon: FileText, t: "PDF research report", d: "Full report with Matplotlib/Seaborn charts, tables, methodology, limitations, citations and disclaimer." },
             { f: "csv" as const, icon: FileSpreadsheet, t: "CSV statistics report", d: "Flat table of dataset provenance, matching counts, descriptive statistics, test results, anomaly counts and constraint metrics." }].map(({ f, icon: Icon, t, d }) => (

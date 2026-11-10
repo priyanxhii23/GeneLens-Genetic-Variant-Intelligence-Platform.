@@ -56,7 +56,7 @@ def list_anomalies(analysis_id: str, kind: str | None = None, category: str | No
 
 def _item(r: AnomalyResult, v: Variant | None) -> dict:
     return {"id": r.id, "variant_id": r.variant_id, "variant_key": r.variant_key, "provenance": r.provenance,
-            "category": r.category, "kind": r.kind, "priority": r.priority, "score": r.score,
+            "category": r.category, "kind": r.kind, "priority": r.priority, "score": r.score,  # no raw evidence
             "headline": r.headline, "reason": r.reason or r.explanation, "why_it_matters": r.why_it_matters,
             "recommendation": r.recommendation, "explanation": r.explanation,
             "clinical_significance": v.clinical_significance if v else None,

@@ -85,7 +85,7 @@ export default function PopulationObservatory() {
         </div>
       </Panel>
 
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+      <div className="layout-split">
         <Panel eyebrow={`top ${rows.length} variants by overall AF`} title="Population frequency matrix">
           <Plot data={heat} height={Math.max(320, rows.length * 18 + 80)} layout={{ margin: { l: 190, r: 20, t: 8, b: 40 }, yaxis: { autorange: "reversed", tickfont: { size: 10, family: "JetBrains Mono" } }, xaxis: { side: "top" } }} />
           <p className="mt-2 text-xs text-faint">Empty (background) cells = population had no allele number at this site or AC = 0. Hover a cell for AC/AN.</p>

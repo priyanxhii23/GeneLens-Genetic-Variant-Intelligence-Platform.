@@ -1,5 +1,6 @@
 /** Dataset selector: all ten registry datasets with provider, assembly, release, type and live status. */
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
+import AnchoredPortal from "./AnchoredPortal";
 import { Check, ChevronDown, CircleDot, Database } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DatasetEntry } from "../lib/types";
@@ -14,11 +15,15 @@ export default function DatasetPicker({ datasets, value, onChange, loading }: {
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement | null>(null);
   const list = datasets ?? [];
   const sel = list.find((d) => d.id === value);
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !panel.current?.contains(t)) setOpen(false);
+    };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
@@ -46,10 +51,9 @@ export default function DatasetPicker({ datasets, value, onChange, loading }: {
         </span>
         <ChevronDown size={16} className={`shrink-0 text-faint transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      <AnimatePresence>
-        {open && (
-          <motion.ul role="listbox" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-            className="absolute z-30 mt-1.5 max-h-[min(70vh,520px)] w-[min(560px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-lift scrollbar-thin">
+      <AnchoredPortal anchor={ref} open={open} minWidth={Math.min(560, typeof window !== "undefined" ? window.innerWidth - 32 : 560)} maxHeight={520} onPanel={(el) => { panel.current = el; }}>
+          <motion.ul role="listbox" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15 }}
+            className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-lift scrollbar-thin">
             {groups.map((g) => {
               const items = list.filter((d) => d.data_type === g);
               if (!items.length) return null;
@@ -83,8 +87,7 @@ export default function DatasetPicker({ datasets, value, onChange, loading }: {
               );
             })}
           </motion.ul>
-        )}
-      </AnimatePresence>
+      </AnchoredPortal>
       {sel && (
         <motion.p key={sel.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-[13.5px] leading-relaxed text-muted">
           {sel.description} <span className="text-faint">({sel.status_detail})</span>
