@@ -200,7 +200,11 @@ Open http://localhost:5173, click **Enter Research Workspace**, type `HBB` and c
 python -m scripts.run_pipeline --gene HBB
 ```
 
-**VS Code:** open the repository folder. Recommended extensions are suggested automatically, and `.vscode/launch.json` contains debug configurations for the API and the CLI pipeline.
+**VS Code:** open the repository folder (*File → Open Folder…*). Accept the recommended extensions, then:
+* first time only: *Terminal → Run Task… → Setup: install everything (first time)*;
+* every time: press **Ctrl+Shift+B** (*GeneLens: start everything*) – the backend and frontend start in two terminal tabs; open http://localhost:5173;
+* debugging: *Run and Debug* (Ctrl+Shift+D) → *GeneLens API (debug)* → F5 lets you set breakpoints in the backend;
+* tests: the beaker (Testing) icon in the sidebar, or *Run Task → Backend: run tests*.
 
 ### Common errors
 | Symptom | Cause / fix |
