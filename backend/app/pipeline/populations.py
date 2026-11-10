@@ -23,22 +23,25 @@ def population_summary(rows: list[dict], top_n: int = 40) -> dict:
         seen = {p["id"]: p for p in r["populations"]}
         for pid in pop_ids:
             p = seen.get(pid)
-            if not p or not p.get("an"):
+            if not p or (not p.get("an") and p.get("af") is None):
                 agg[pid]["missing"] += 1
                 continue
             a = agg[pid]
-            a["an_values"].append(p["an"])
-            if p["ac"] > 0:
+            if p.get("an"):
+                a["an_values"].append(p["an"])
+            # uploaded datasets may report a population AF without AC/AN; AC is then left out of totals
+            observed = p["ac"] > 0 if p.get("ac") is not None else (p.get("af") or 0) > 0
+            if observed:
                 a["variants_observed"] += 1
-                a["total_ac"] += p["ac"]
+                a["total_ac"] += p.get("ac") or 0
                 bc = a["by_class"][r.get("coarse_class", "NOT_IN_CLINVAR")]
                 bc["observed"] += 1
-                bc["total_ac"] += p["ac"]
+                bc["total_ac"] += p.get("ac") or 0
     groups = []
     for pid, a in agg.items():
-        an = np.array(a.pop("an_values") or [0])
-        groups.append({**a, "by_class": dict(a["by_class"]), "median_an": float(np.median(an)),
-                       "mean_an": float(an.mean()), "missing_fraction": a["missing"] / len(variants) if variants else None})
+        an = np.array(a.pop("an_values"))
+        groups.append({**a, "by_class": dict(a["by_class"]), "median_an": float(np.median(an)) if an.size else None,
+                       "mean_an": float(an.mean()) if an.size else None, "missing_fraction": a["missing"] / len(variants) if variants else None})
 
     # per-variant matrix for the most frequent annotated variants
     ranked = sorted((r for r in variants if r.get("af")), key=lambda r: r["af"], reverse=True)[:top_n]
@@ -50,7 +53,7 @@ def population_summary(rows: list[dict], top_n: int = 40) -> dict:
             "coarse_class": r.get("coarse_class"), "clinical_significance": r.get("clinical_significance"),
             "af": r["af"], "provenance": r.get("provenance", "REAL"),
             "populations": {pid: {"af": pops[pid].get("af"), "ac": pops[pid].get("ac"), "an": pops[pid].get("an")}
-                            if pid in pops and pops[pid].get("an") else None for pid in pop_ids},
+                            if pid in pops and (pops[pid].get("an") or pops[pid].get("af") is not None) else None for pid in pop_ids},
         })
     # distribution of popmax population among P/LP variants
     popmax_counts: dict[str, int] = defaultdict(int)
