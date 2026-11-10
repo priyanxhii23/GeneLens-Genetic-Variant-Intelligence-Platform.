@@ -1,0 +1,27 @@
+# --- Web API ---
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-multipart==0.0.20
+
+# --- Data layer ---
+SQLAlchemy==2.0.36
+alembic==1.14.0
+
+# --- HTTP clients for gnomAD / NCBI ---
+httpx==0.28.1
+
+# --- Scientific stack ---
+numpy==2.1.3
+pandas==2.2.3
+scipy==1.14.1
+scikit-learn==1.5.2
+matplotlib==3.9.3
+seaborn==0.13.2
+
+# --- Reports ---
+reportlab==4.2.5
+
+# --- Testing ---
+pytest==8.3.4

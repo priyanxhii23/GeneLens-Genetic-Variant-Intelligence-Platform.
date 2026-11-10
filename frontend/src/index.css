@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------
+   GeneLens design tokens (RGB triplets so Tailwind can apply alpha).
+   Classification colours were validated for colour-vision deficiency
+   with the dataviz palette validator (light + dark surfaces).
+------------------------------------------------------------------- */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: 247 243 234;        /* warm ivory */
+  --surface: 255 255 255;
+  --raised: 251 248 241;
+  --line: 228 221 206;
+  --ink: 11 27 51;          /* deep navy */
+  --muted: 74 90 116;
+  --faint: 135 146 166;
+  --accent: 15 139 141;     /* teal */
+  --accent2: 59 110 165;    /* muted blue */
+  --violet: 109 79 196;
+  --plp: 214 69 90;
+  --vus: 208 138 0;
+  --blb: 0 151 143;
+  --conf: 122 90 208;
+  --other: 100 116 139;
+  --good: 22 128 61;
+  --warn: 180 83 9;
+  --bad: 190 18 60;
+  --grid: 15 23 42;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: 7 11 20;            /* obsidian navy */
+  --surface: 12 19 34;
+  --raised: 17 26 46;
+  --line: 30 42 68;
+  --ink: 230 237 247;
+  --muted: 147 163 189;
+  --faint: 91 107 134;
+  --accent: 34 211 238;     /* cyan */
+  --accent2: 20 184 166;    /* teal */
+  --violet: 139 92 246;
+  --plp: 224 86 107;
+  --vus: 185 125 5;
+  --blb: 19 165 151;
+  --conf: 140 116 230;
+  --other: 120 135 160;
+  --good: 52 211 153;
+  --warn: 251 191 36;
+  --bad: 251 113 133;
+  --grid: 148 163 184;
+}
+
+html { background: rgb(var(--bg)); }
+body {
+  @apply bg-bg text-ink font-sans antialiased;
+  transition: background-color 0.45s ease, color 0.45s ease;
+}
+* { border-color: rgb(var(--line)); }
+/* Let grid tracks shrink below their content (wide tables scroll inside their panel instead). */
+.grid > * { min-width: 0; }
+::selection { background: rgb(var(--accent) / 0.25); }
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-line bg-surface/80 backdrop-blur-sm;
+    transition: background-color 0.45s ease, border-color 0.45s ease;
+  }
+  :root[data-theme="light"] .panel { @apply shadow-soft; }
+  .eyebrow { @apply font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint; }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium
+           transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary { @apply btn bg-accent text-bg hover:shadow-glow hover:-translate-y-px; }
+  .btn-ghost { @apply btn border border-line bg-raised/60 text-ink hover:border-accent/50 hover:text-accent; }
+  .input {
+    @apply w-full rounded-xl border border-line bg-raised/70 px-3 py-2 text-sm text-ink placeholder:text-faint
+           focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/20;
+  }
+  .chip { @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium; }
+  .data { @apply font-mono tabular-nums; }
+  .table-head { @apply eyebrow sticky top-0 z-10 bg-surface px-3 py-2 text-left font-normal; }
+  .table-cell { @apply border-t border-line/70 px-3 py-2 text-sm; }
+}
+
+/* Synthetic data is always visually distinct: diagonal hatch. */
+.synthetic-hatch {
+  background-image: repeating-linear-gradient(135deg, rgb(var(--violet) / 0.16) 0 6px, transparent 6px 12px);
+}
+
+/* Fine grid used behind the workspace */
+.lab-grid {
+  background-image:
+    linear-gradient(rgb(var(--grid) / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--grid) / 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
