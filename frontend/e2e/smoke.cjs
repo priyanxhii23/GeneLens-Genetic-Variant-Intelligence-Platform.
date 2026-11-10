@@ -4,7 +4,7 @@
  * one completed analysis (HBB) plus one synthetic job linked to it, and a
  * second completed gnomAD v4 analysis (CFTR) for the comparison lab.
  *
- *   node e2e/smoke.cjs <analysisId> [screenshotDir]
+ *   node e2e/smoke.cjs <analysisId> [screenshotDir] [customDatasetFile]
  *
  * Uses Playwright (npm i -D playwright && npx playwright install chromium).
  */
@@ -13,6 +13,7 @@ const { chromium } = require("playwright");
 const BASE = process.env.GENELENS_URL || "http://localhost:5173";
 const AID = process.argv[2];
 const SHOTS = process.argv[3];
+const CUSTOM_FILE = process.argv[4];
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail }); console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` – ${detail}` : ""}`); };
 
@@ -152,7 +153,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
   await firstCard.getByRole("button", { name: /Full variant details/ }).click();
   await page.waitForTimeout(1500);
   const drawer = await page.locator("[role=dialog]").innerText();
-  check("Full variant details accessible with technical evidence", drawer.includes("Technical evidence"));
+  check("Variant details are structured, without raw technical evidence", !drawer.includes("Technical evidence") && (await page.locator("[role=dialog] pre").count()) === 0 && /Population frequency/i.test(drawer) && /Clinical classification/i.test(drawer));
   await page.keyboard.press("Escape");
 
   // ---------- statistics + synthetic lab
@@ -169,9 +170,26 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
   check("Sources show method, last connection, records, refresh", ["integration method", "last successful connection", "records retrieved", "refresh"].every((t) => srcText.toLowerCase().includes(t)));
   await shot("sources");
 
+  // ---------- population observatory content
+  await go("/workspace/populations");
+  await page.waitForSelector("text=Variants with population data", { timeout: 20000 }).catch(() => {});
+  const pop = (await page.locator("main").innerText()).toLowerCase();  // labels are CSS-uppercased
+  check("Population Observatory loads metrics and highest AF per group", pop.includes("variants with population data") && pop.includes("highest af in group"));
+
   // ---------- comparison lab
   await go("/workspace/compare");
   await page.waitForTimeout(3000);
+  // gene dropdown must render above every panel (portal) – hit-test each visible option
+  const combo = page.locator("main input[role=combobox]").first();
+  if (await combo.count()) {
+    await combo.click(); await page.waitForTimeout(600);
+    const hit = await page.evaluate(() => {
+      const opts = [...document.querySelectorAll("[role=option]")].filter((o) => { const r = o.getBoundingClientRect(); return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight; });
+      return { n: opts.length, ok: opts.every((o) => { const r = o.getBoundingClientRect(); const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return o.contains(el); }) };
+    });
+    check("Comparison gene dropdown is on top of all panels", hit.n > 0 && hit.ok, `${hit.n} visible options`);
+    await page.keyboard.press("Escape");
+  }
   const cmp = await page.locator("main").innerText();
   check("Comparison shows HBB and CFTR side by side", (await page.locator("main .font-display", { hasText: /^HBB$/ }).count()) > 0 && (await page.locator("main .font-display", { hasText: /^CFTR$/ }).count()) > 0);
   check("What-if shows previous/updated/difference/% change", ["previous result", "updated result", "difference", "% change"].every((t) => cmp.toLowerCase().includes(t)));
@@ -198,6 +216,31 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
   check("Provenance history preserved in Report Generator", (await page.locator("main").innerText()).includes("Analysis history & provenance"));
   await shot("reports");
 
+  // ---------- custom dataset lab
+  if (CUSTOM_FILE) {
+    await go("/workspace/custom");
+    await page.getByTestId("add-dataset").click();
+    await page.setInputFiles("[data-testid=file-input]", CUSTOM_FILE);
+    await page.getByRole("button", { name: "Upload & inspect" }).click();
+    await page.waitForSelector("[data-testid=preview-table]", { timeout: 30000 });
+    const rows = await page.locator("[data-testid=preview-table] tbody tr").count();
+    check("Custom upload shows a 10–20 row preview before processing", rows >= 10 && rows <= 20, `${rows} rows`);
+    check("Custom data labelled CUSTOM DATA", (await page.locator("text=CUSTOM DATA").count()) > 0);
+    await page.getByRole("radio", { name: "GRCh38" }).click();
+    await page.getByTestId("run-analysis").click();
+    await page.waitForSelector("text=Where each result comes from", { timeout: 120000 });
+    const dash = (await page.locator("main").innerText()).toLowerCase();
+    check("Custom dashboard shows totals, provenance of values and quality", ["total records", "valid", "duplicates", "quality checks", "clinvar matching"].every((t) => dash.includes(t)));
+    await shot("custom-dataset");
+  }
+
+  // ---------- no raw JSON / stack traces anywhere
+  for (const p of ["/workspace", "/workspace/variants", "/workspace/pathogenicity", "/workspace/populations", "/workspace/constraint", "/workspace/anomalies", "/workspace/statistics", "/workspace/synthetic", "/workspace/compare", "/workspace/reports", "/workspace/sources", "/workspace/custom"]) {
+    await go(p);
+    const t = await page.locator("main").innerText();
+    check(`No raw JSON or traceback on ${p}`, (await page.locator("main pre").count()) === 0 && !/Traceback|\bat Object\.|\{"detail"/.test(t));
+  }
+
   // ---------- theme persistence
   await page.getByRole("button", { name: /Switch to light theme/ }).click();
   await page.reload({ waitUntil: "networkidle" });
@@ -209,10 +252,10 @@ const check = (name, ok, detail = "") => { results.push({ name, ok: !!ok, detail
   // ---------- responsiveness
   for (const w of [1280, 1024, 768]) {
     await page.setViewportSize({ width: w, height: 900 });
-    for (const p of ["/workspace", "/workspace/variants", "/workspace/compare", "/workspace/sources"]) {
+    for (const p of ["/workspace", "/workspace/variants", "/workspace/pathogenicity", "/workspace/populations", "/workspace/constraint", "/workspace/anomalies", "/workspace/statistics", "/workspace/synthetic", "/workspace/compare", "/workspace/reports", "/workspace/sources", "/workspace/custom"]) {
       await go(p);
       const sw = await page.evaluate(() => document.documentElement.scrollWidth);
-      check(`No horizontal page overflow at ${w}px on ${p}`, sw <= w, `${sw}px`);
+      check(`No horizontal page overflow at ${w}px (light) on ${p}`, sw <= w, `${sw}px`);
     }
   }
   await page.setViewportSize({ width: 1440, height: 900 });

@@ -8,7 +8,7 @@ DATA COLLECTION → DATA VALIDATION → DATA PREPROCESSING → VARIANT NORMALIZA
 ```
 
 ## 1. Data collection (`services/`, `datasets.py`)
-Frequency or catalogue records for one gene from the selected dataset (gnomAD v2.1–v4/ExAC, 1000 Genomes phase 3, or dbSNP; none for the ClinVar-only dataset), ClinVar records for the same gene on the same assembly, gnomAD gene constraint, and a gene-annotation cross-check from Ensembl and UCSC. See [data_sources.md](data_sources.md). Provenance is stored for every dataset and source.
+Frequency or catalogue records for one gene from the selected dataset (gnomAD v2.1–v4/ExAC, 1000 Genomes phase 3, or dbSNP; none for the ClinVar-only dataset), ClinVar records for the same gene on the same assembly, gnomAD gene constraint, and a gene-annotation cross-check from Ensembl and UCSC. See [../DATA_SOURCES.md](../DATA_SOURCES.md). Provenance is stored for every dataset and source.
 
 ## 2. Data validation (`validation.py`)
 * `AF = AC / AN` is defined only when `AN > 0` and `0 ≤ AC ≤ AN`; otherwise it is `None`.

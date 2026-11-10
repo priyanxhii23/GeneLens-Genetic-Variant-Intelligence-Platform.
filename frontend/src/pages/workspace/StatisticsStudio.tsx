@@ -8,6 +8,7 @@ import { api } from "../../lib/api";
 import { useAnalysis, useFetch } from "../../lib/analysis";
 import { CLASS_META, fmtAF, fmtInt, fmtNum, fmtP, MAIN_CLASSES, pct, token } from "../../lib/format";
 import type { StatTest, Statistics } from "../../lib/types";
+import { wilson } from "../../lib/stats";
 
 function Contingency({ t }: { t: { rows: string[]; columns: string[]; counts: number[][] } }) {
   return (
@@ -81,14 +82,6 @@ function TestCard({ t }: { t: StatTest }) {
   );
 }
 
-/** Wilson score interval (95%) – same method as the backend; returns [estimate, lower, upper]. */
-function wilson(k: number, n: number): [number, number, number] | null {
-  if (!n) return null;
-  const z = 1.959963984540054, p = k / n, d = 1 + (z * z) / n;
-  const c = (p + (z * z) / (2 * n)) / d, h = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / d;
-  return [p, Math.max(0, c - h), Math.min(1, c + h)];
-}
-
 export default function StatisticsStudio() {
   const { analysisId, detail } = useAnalysis();
   const { mode } = useProvenance();
@@ -143,13 +136,13 @@ export default function StatisticsStudio() {
               <p className="meta">Curves further right = more frequent variants. Mann–Whitney asks whether one curve sits systematically to the right of another.{mode === "BOTH" ? " Dashed = synthetic." : ""}</p>
             </Panel>
             <Panel eyebrow="descriptive" title="Per-class summary">
-              <table className="w-full text-[14px]">
+              <div className="overflow-x-auto scrollbar-thin"><table className="w-full text-[14px]">
                 <thead><tr>{["Class", "n", "Median", "Mean", "SD", "IQR"].map((h) => <th key={h} className="table-head !px-2">{h}</th>)}</tr></thead>
                 <tbody>{MAIN_CLASSES.map((c) => { const d = s.descriptive[c]; return (
                   <tr key={c}><td className="table-cell !px-2"><ClassBadge cls={c} /></td><td className="table-cell data !px-2 text-[13px]">{fmtInt(d?.n)}</td>
                     <td className="table-cell data !px-2 text-[13px]">{fmtAF(d?.median)}</td><td className="table-cell data !px-2 text-[13px]">{fmtAF(d?.mean)}</td>
                     <td className="table-cell data !px-2 text-[13px]">{fmtAF(d?.std)}</td><td className="table-cell data !px-2 text-[13px]">{fmtAF(d?.iqr)}</td></tr>); })}</tbody>
-              </table>
+              </table></div>
               {prop?.estimate !== null && prop?.ci95_wilson && (
                 <div className="mt-4 rounded-xl bg-raised/60 p-3 text-[14px]">
                   P/LP share of ClinVar records: <span className="data">{pct(prop.estimate)}</span> <span className="text-[12.5px] text-muted">(95% Wilson CI {pct(prop.ci95_wilson[0])}–{pct(prop.ci95_wilson[1])}, n = {fmtInt(prop.n)})</span>

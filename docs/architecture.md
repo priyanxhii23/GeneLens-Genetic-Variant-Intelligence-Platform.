@@ -11,11 +11,11 @@ Large datasets never travel to the browser: the frontend asks for paginated vari
 ## Folder structure
 ```
 GeneLens-Genetic-Variant-Intelligence-Platform./
-├── README.md · LICENSE · DEVELOPMENT_STATUS.md · .gitignore
+├── README.md · LICENSE · DEVELOPMENT_STATUS.md · DATA_SOURCES.md · PERFORMANCE_REPORT.md · .gitignore
 ├── .github/workflows/ci.yml          # pytest + frontend build on every push
 ├── .vscode/                          # interpreter, test and debug configuration
 ├── docs/
-│   ├── architecture.md · methodology.md · data_sources.md
+│   ├── architecture.md · methodology.md
 │   └── screenshots/
 ├── backend/
 │   ├── requirements.txt · .env.example · pytest.ini · alembic.ini

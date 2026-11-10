@@ -1,6 +1,19 @@
 # Data sources
 
-GeneLens uses only public data, retrieved at analysis time, and records exactly how and when every dataset was obtained.
+GeneLens uses only public data, retrieved at analysis time, and records exactly how and when every dataset was obtained. Researcher-uploaded **custom datasets** are a separate category (see the end of this document) and are never merged with these sources.
+
+## The seven integrated sources at a glance
+| # | Source | Endpoint(s) | Method | Datasets served | Formats | Limits / notes | Assemblies |
+|---|---|---|---|---|---|---|---|
+| 1 | **gnomAD GraphQL API** (Broad Institute) | `https://gnomad.broadinstitute.org/api` | GraphQL over HTTPS (POST) | gnomAD v4, v4 non-UKB, v3, v3 non-cancer, v2.1, v2.1 non-cancer, ExAC; gene constraint | JSON | No published rate limit; GeneLens caches responses 7 days and retries 429/5xx with back-off | GRCh38 (v3/v4), GRCh37 (v2.1/ExAC) |
+| 2 | **NCBI ClinVar E-utilities** | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/` (`esearch`, `esummary`, `einfo`) | REST (GET/POST), history server, 400 IDs per batch, ≤ 3 batches in flight | ClinVar classifications for every analysis; ClinVar Variant Summary dataset | JSON | 3 requests/s without key, 10 with `GENELENS_NCBI_API_KEY`; shared throttle with dbSNP | GRCh38 (SPDI); GRCh37 via ClinVar's own GRCh37 locations |
+| 3 | **ClinVar bulk TSV / FTP** | `https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz` | HTTPS file download (HEAD probe; optional background download from the Source Manager or `python -m scripts.download_clinvar`) | ClinVar Variant Summary (offline / bulk route) | gzip-compressed TSV (~450 MB) | Updated weekly; read in 200,000-row chunks; per-gene extracts cached in `data/processed/` | GRCh37 and GRCh38 rows (`Assembly` column) |
+| 4 | **Ensembl REST API** (EMBL-EBI) | `https://rest.ensembl.org`, `https://grch37.rest.ensembl.org` | REST (GET) | Gene annotation cross-check; GRCh37 gene region for 1000 Genomes; on-demand VEP | JSON | 15 requests/s documented limit; GeneLens issues a handful per analysis | GRCh38, GRCh37 |
+| 5 | **NCBI dbSNP / Variation Services** | E-utilities `db=snp`; `https://api.ncbi.nlm.nih.gov/variation/v0/` | REST (GET/POST) | dbSNP RefSNP dataset; variant-drawer RefSNP details | JSON | Shares the NCBI rate limit; capped at 25,000 RefSNPs per gene | GRCh38 |
+| 6 | **IGSR / 1000 Genomes** (EMBL-EBI) | `https://www.internationalgenome.org/api/beta/…`; `ftp.1000genomes.ebi.ac.uk` phase 3 VCFs | Data-portal API + tabix index + HTTP range requests (pure-Python BGZF reader) | 1000 Genomes Project phase 3 | JSON, bgzipped VCF + `.tbi` | Only the gene region is read (~130 kB index + a few MB) | GRCh37 |
+| 7 | **UCSC Genome Browser API** | `https://api.genome.ucsc.edu` | REST (GET) | Assembly descriptions, RefSeq transcript coordinates, cytogenetic band | JSON | Documented courtesy limit of 1 request/s; GeneLens issues 2–3 per analysis | hg38 (GRCh38), hg19 (GRCh37) |
+
+Source status (connection, last check, latency, version, records retrieved) is measured live and shown in the **Source Manager** – Section A. For the ClinVar bulk file the Source Manager reports each stage separately: *source reachable → remote file available → downloaded → indexed (per-gene extracts) → records imported*.
 
 ## Overview: ten datasets, seven sources
 | # | Dataset (`id`) | Provider | Assembly | Data type | Source connector(s) |
@@ -75,3 +88,17 @@ ClinVar's esummary reports each variant's start on **both** GRCh38 and GRCh37 (`
 gnomAD and ClinVar make their data freely available for research. Check each provider's current terms of use before redistributing data, and cite them in any work that uses GeneLens output:
 * gnomAD: Chen S, et al. Nature 625, 92–100 (2024) and Karczewski KJ, et al. Nature 581, 434–443 (2020); https://gnomad.broadinstitute.org/
 * ClinVar: Landrum MJ, et al. Nucleic Acids Res 48, D835–D844 (2020); https://www.ncbi.nlm.nih.gov/clinvar/
+
+## Custom datasets (Custom Dataset Lab)
+Researchers can upload their own variant files. These are **not** an external source and are kept strictly apart from the datasets above:
+
+| Aspect | Behaviour |
+|---|---|
+| Formats | CSV, TSV, TXT (delimiter detected), VCF, VCF.GZ (multi-allelic sites split per ALT; INFO AC/AN/AF/CLNSIG/GENEINFO read), JSON (a list of records, or an object containing one) |
+| Size | Up to 200 MB per file, streamed to disk in 1 MB chunks (`backend/data/uploads/<id>/`) |
+| Columns | Detected automatically from common names (chrom/pos/ref/alt, variant id `1-12345-A-G`, AC/AN/AF, gene, rsID, clinical significance, review status, population columns such as `AF_nfe` or `afr_AC`) and editable in a mapping UI |
+| Assembly | Read only from explicit metadata (`##reference`, `##contig …assembly=`) or chosen by the user. **Never inferred from coordinates.** Unknown assembly disables ClinVar matching; assemblies are never mixed |
+| Frequencies | AF = AC/AN when both exist (checked against a reported AF); otherwise a reported AF is kept and flagged `af_reported_without_counts`. Missing stays missing – never zero |
+| Classifications | The file's own classifications are kept. ClinVar (E-utilities, genes taken from the mapped gene column, max 10 genes) is used either to **annotate** records without a classification or, when the file has one, only for a **concordance** comparison. Matching is by exact allele, then minimal representation – never by gene name or position alone |
+| Labelling | Stored with `provenance = CUSTOM` and the dataset id; shown with a violet **CUSTOM DATA** badge; every export carries a CUSTOM notice |
+| Outputs | Dashboard, cleaned CSV, analysis export (JSON/CSV), processing history |
