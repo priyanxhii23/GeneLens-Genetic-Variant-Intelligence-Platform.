@@ -140,11 +140,12 @@ node --version
 ```
 
 ### Step 1 – clone
+The repository name ends with a dot, which Windows does not allow as a folder name, so clone into a folder called `GeneLens`:
 ```bash
-git clone https://github.com/priyanxhii23/GeneLens-Genetic-Variant-Intelligence-Platform.
+git clone https://github.com/priyanxhii23/GeneLens-Genetic-Variant-Intelligence-Platform. GeneLens
 ```
 ```bash
-cd GeneLens-Genetic-Variant-Intelligence-Platform.
+cd GeneLens
 ```
 
 ### Step 2 – backend (Python)
