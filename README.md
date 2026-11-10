@@ -1,6 +1,6 @@
 # GeneLens – Genetic Variant Intelligence Platform
 
-> An interactive research platform that integrates **gnomAD** population allele frequencies with **ClinVar** clinical classifications to study how frequency and clinical interpretation relate – with explainable anomaly screening, rigorous statistics, a provenance-labelled synthetic data lab and downloadable research reports.
+> A research platform that integrates **population allele frequencies** (gnomAD, 1000 Genomes, dbSNP) with **ClinVar clinical classifications**, cross-checked against **Ensembl** and **UCSC** – with explainable anomaly screening, rigorous statistics, a provenance-labelled synthetic data lab, a gene comparison lab and downloadable research reports.
 
 ![GeneLens landing page](docs/screenshots/landing.png)
 
@@ -9,328 +9,331 @@
 ---
 
 ## Table of contents
-1. [Introduction](#1-introduction)
-2. [Research problem](#2-research-problem)
-3. [Research objectives](#3-research-objectives)
-4. [Features – the ten modules](#4-features--the-ten-modules)
-5. [Technology stack](#5-technology-stack)
-6. [Architecture](#6-architecture)
-7. [Data sources](#7-data-sources)
-8. [Dataset acquisition](#8-dataset-acquisition)
-9. [Installation](#9-installation)
-10. [Running the application](#10-running-the-application)
-11. [Statistical methodology](#11-statistical-methodology)
-12. [Synthetic data methodology](#12-synthetic-data-methodology)
-13. [Screenshots](#13-screenshots)
-14. [API documentation](#14-api-documentation)
-15. [Testing](#15-testing)
-16. [Limitations](#16-limitations)
-17. [Future enhancements](#17-future-enhancements)
-18. [References and data attribution](#18-references-and-data-attribution)
+**Part A – Getting started**
+1. [Extract the ZIP](#1-extract-the-zip)
+2. [Open it in VS Code](#2-open-it-in-vs-code)
+3. [Create the Python virtual environment](#3-create-the-python-virtual-environment)
+4. [Install backend dependencies](#4-install-backend-dependencies)
+5. [Install frontend dependencies](#5-install-frontend-dependencies)
+6. [Configure environment variables](#6-configure-environment-variables)
+7. [Run the backend](#7-run-the-backend)
+8. [Run the frontend](#8-run-the-frontend)
+9. [Access the application](#9-access-the-application)
+10. [Troubleshooting](#10-troubleshooting)
+11. [Configure and retrieve datasets](#11-configure-and-retrieve-datasets)
+12. [Run the tests](#12-run-the-tests)
+
+**Part B – The project**
+13. [Research problem & objectives](#13-research-problem--objectives) · 14. [Features](#14-features--eleven-modules) · 15. [Data ecosystem](#15-data-ecosystem--10-datasets-7-sources) · 16. [Technology stack](#16-technology-stack) · 17. [Architecture](#17-architecture) · 18. [Statistical methodology](#18-statistical-methodology) · 19. [Synthetic data methodology](#19-synthetic-data-methodology) · 20. [Screenshots](#20-screenshots) · 21. [API](#21-api-documentation) · 22. [Limitations](#22-limitations) · 23. [Future work](#23-future-enhancements) · 24. [References](#24-references-and-data-attribution)
 
 ---
 
-## 1. Introduction
-GeneLens retrieves **real** variant data for a gene of your choice:
+# Part A – Getting started
 
-* **gnomAD** (Genome Aggregation Database): allele counts (AC), allele numbers (AN) and frequencies (AF), overall and per genetic-ancestry group, plus gene-level constraint metrics (pLI, LOEUF, observed/expected counts).
-* **ClinVar** (NCBI): clinical significance, review status, conditions and submission counts.
-
-It then validates, normalises and **matches the two databases allele by allele** (never by gene name), stores everything in a SQL database with full provenance, and gives you ten research modules to explore the result.
-
-## 2. Research problem
-A variant classified as *pathogenic* for a rare Mendelian disease is usually rare in the general population. When a pathogenic variant is common – or a *benign* one is extremely rare – the combination deserves attention. Possible explanations include **biology** (recessive carrier frequency, reduced penetrance, founder effects, balancing selection such as the sickle-cell allele), **data quality** (low coverage, failed QC filters, incomplete records, ambiguous matching) or an **interpretation that merits review**. Telling these apart requires integrated data, careful matching and transparent statistics.
-
-## 3. Research objectives
-1. Retrieve real gnomAD and ClinVar data for a gene with full provenance (source, release, genome build, retrieval date).
-2. Clean, validate and normalise variant representations, including indels.
-3. Match records between databases using genomic coordinates and alleles; report exact, normalised, ambiguous and unmatched records separately.
-4. Compare allele frequencies across P, LP, VUS, LB and B classifications with appropriate non-parametric statistics, effect sizes, confidence intervals and multiple-testing correction.
-5. Screen for unusual frequency–classification combinations with explainable rules and statistical outlier detection, separating data-quality issues from biologically interesting observations.
-6. Describe population-level frequency patterns and gene constraint without inferring individual risk.
-7. Generate clearly labelled synthetic datasets from estimated distributions and use them to evaluate the screening engine.
-8. Produce reproducible, downloadable reports.
-
-## 4. Features – the ten modules
-| # | Module | What it does |
-|---|--------|--------------|
-| 01 | **Genomic Command Center** | Gene search (gnomAD autocomplete), dataset/source selection, live data-source status, pipeline progress, counts (variants, matched, P/LP, B/LB, VUS, conflicting, flagged), dataset provenance table, real vs synthetic breakdown, recent analyses. |
-| 02 | **Variant Explorer** | Server-side search, filters (class, match status, provenance, AF range, flagged), sorting, pagination, detail drawer (population chart, flags, links to gnomAD/ClinVar), CSV export. |
-| 03 | **Pathogenicity Intelligence Lab** | Fine-grained classification distribution, log-AF box plots and distributions, descriptive table, review stars by class, conflicting interpretations, explainable unusual-combination flags. |
-| 04 | **Population Frequency Observatory** | Population × variant AF heatmap, variants per group by class, grpmax distribution for P/LP variants, missing-AN indicators, population and class filters, comparison tables. |
-| 05 | **Gene Constraint Observatory** | pLI / LOEUF / missense-Z scales, o/e ratios with 90 % CIs, observed vs expected counts, multi-gene LOEUF comparison, metric explanations and caveats. |
-| 06 | **Variant Anomaly Detection Engine** | Configurable rules, robust MAD outliers, seeded Isolation Forest; each flag has a category, kind (data quality / biological interest / statistical outlier), priority, evidence and explanation. |
-| 07 | **Statistical Analysis Studio** | Descriptives, ECDFs, Mann–Whitney U, chi-square, Fisher's exact, Spearman, Wilson CI, effect sizes with CIs, assumption checks, BH-FDR + Bonferroni, beginner explanations. |
-| 08 | **Synthetic Genome Data Lab** | Seeded generator fitted to real distributions; class mix, missingness, conflicts, unusual patterns, populations; real-vs-synthetic comparison (KS, TVD); anomaly-engine recovery check; CSV export. |
-| 09 | **Research Report Generator** | PDF (ReportLab + Matplotlib/Seaborn charts) and CSV reports with methodology, statistics, flags, limitations, citations and disclaimer. |
-| 10 | **Research History & Provenance** | Timeline of analyses with parameters, dataset releases, retrieval dates, record counts, exports and synthetic jobs; reopen or delete. |
-
-Plus an animated landing page (canvas DNA double helix, molecular particles, scroll transitions), persistent light/dark themes, reduced-motion support and responsive layouts.
-
-## 5. Technology stack
-| Layer | Technologies |
-|-------|--------------|
-| Frontend | React 18, TypeScript 5, Vite 5, Tailwind CSS 3, Framer Motion 11, Plotly.js (cartesian bundle) via react-plotly.js, Lucide icons, React Router 6 |
-| Backend | Python 3.11+ (tested on 3.13; CI on 3.12), FastAPI, Pydantic v2, Uvicorn, httpx |
-| Science | pandas, NumPy, SciPy, scikit-learn, Matplotlib, Seaborn |
-| Data | SQLAlchemy 2.0 ORM, SQLite by default (PostgreSQL-ready), Alembic migrations |
-| Reports | ReportLab |
-| Testing | pytest, FastAPI TestClient |
-
-**Why no Biopython?** GeneLens never parses sequence files. It works with VCF-style coordinates and canonical SPDI strings, which are simpler to handle directly, so Biopython would be an unused dependency.
-
-## 6. Architecture
-```mermaid
-flowchart LR
-  subgraph Browser
-    UI[React + Vite UI<br/>10 modules]
-  end
-  subgraph FastAPI backend
-    API[REST API /api/*]
-    PIPE[Research pipeline<br/>app/pipeline/*]
-    SVC[Data services<br/>gnomAD · ClinVar]
-    DB[(SQLite / PostgreSQL)]
-    FS[(data dir: cache · raw · reports)]
-  end
-  GNOMAD[(gnomAD GraphQL API)]
-  NCBI[(NCBI E-utilities /<br/>ClinVar FTP TSV)]
-  UI -- "/api (Vite proxy)" --> API
-  API --> PIPE --> SVC
-  SVC --> GNOMAD
-  SVC --> NCBI
-  PIPE --> DB
-  SVC --> FS
-  API --> DB
-```
-
-Pipeline stages (each a separate, independently tested module in `backend/app/pipeline/`):
-
-```
-collection → validation → preprocessing → normalization → gnomAD–ClinVar matching
-→ statistics → anomaly screening → visualization data → interpretation → report
-```
-
-See [docs/architecture.md](docs/architecture.md) for the full design, folder structure and data model.
-
-## 7. Data sources
-| Source | Access | What GeneLens uses |
-|--------|--------|-------------------|
-| gnomAD browser GraphQL API (`gnomad.broadinstitute.org/api`) | Live, cached on disk | `gene.variants(dataset)`: AC/AN/AF (exome, genome, joint), populations, filters, consequence, HGVS; `gene.gnomad_constraint` |
-| NCBI E-utilities (`esearch` + `esummary`, db=clinvar) | Live, cached | Variation ID, allele (measure) ID, canonical SPDI, germline classification, review status, conditions, submissions |
-| ClinVar `variant_summary.txt.gz` (NCBI FTP) | Optional bulk download (~450 MB) | Same fields with VCF-normalised positions; required for GRCh37 analyses |
-
-The gnomAD fields were verified against the live schema by introspection (`python -m scripts.inspect_gnomad_schema`). Details, releases and licensing notes are in [docs/data_sources.md](docs/data_sources.md).
-
-## 8. Dataset acquisition
-* **Default: nothing to download.** Running an analysis fetches gnomAD and ClinVar data for the chosen gene live and caches the responses in `backend/data/cache/`.
-* **Optional bulk ClinVar TSV** (needed for gnomAD v2.1 / GRCh37 analyses, or for fully offline ClinVar):
-  ```bash
-  python -m scripts.download_clinvar
-  ```
-  Run it inside `backend/`, then choose *ClinVar source → variant_summary TSV* in the Command Center.
-* **Offline snapshots.** The repository ships a real snapshot for **HBB** (retrieved 2026-11-10). It is used *only* if a live API is unreachable, and the dataset is then labelled `offline_snapshot` everywhere. Create your own with `python -m scripts.create_snapshot --gene CFTR`.
-
-## 9. Installation
-You need **Python 3.11 or newer**, **Node.js 18 or newer** (20 LTS recommended) and **Git**. Check your versions:
+You need **Python 3.11 or newer** (3.12 recommended), **Node.js 18 or newer** (20 LTS recommended) and **VS Code**. Check your versions in a terminal:
 ```bash
 python --version
 ```
 ```bash
 node --version
 ```
+On Windows, install Python from python.org and tick **"Add python.exe to PATH"**. Install Node.js LTS from nodejs.org with default options.
 
-### Step 1 – clone
-The repository name ends with a dot, which Windows does not allow as a folder name, so clone into a folder called `GeneLens`:
+## 1. Extract the ZIP
+Right-click `GeneLens_Complete_Project.zip` → **Extract All…** (Windows) or double-click it (macOS). You get a folder called **`GeneLens`** containing `backend/`, `frontend/`, `docs/` and this README. A short path without special characters works best, e.g. `C:\Users\<you>\GeneLens` or `~/GeneLens`.
+
+*(Cloning with Git instead? The repository name ends with a dot, which Windows does not allow as a folder name, so clone into a folder called `GeneLens`:)*
 ```bash
 git clone https://github.com/priyanxhii23/GeneLens-Genetic-Variant-Intelligence-Platform. GeneLens
 ```
-```bash
-cd GeneLens
-```
 
-### Step 2 – backend (Python)
+## 2. Open it in VS Code
+**File → Open Folder…** and choose the **`GeneLens`** folder itself (not `backend` or `frontend`). If asked *"Do you trust the authors?"*, choose **Yes**. Accept the popup to install the **recommended extensions** (Python, Pylance, Python Debugger, Tailwind CSS).
+
+VS Code is pre-configured (`.vscode/`):
+* **Ctrl+Shift+B** → *GeneLens: start everything* (backend + frontend in two terminal tabs)
+* **Terminal → Run Task…** → *Setup: install everything (first time)*, *Backend: run tests*, *Backend: run pipeline for HBB (CLI)*
+* **Run and Debug** (Ctrl+Shift+D) → *GeneLens API (debug)* to set breakpoints in backend code
+* **Testing** (beaker icon) → run the backend test suite
+
+The fastest path is **Terminal → Run Task… → Setup: install everything (first time)**, which performs steps 3–5 for you. Then press **Ctrl+Shift+B**. The manual steps follow.
+
+## 3. Create the Python virtual environment
+Open a terminal in VS Code (**Terminal → New Terminal**):
 ```bash
 cd backend
 ```
-Create a virtual environment (an isolated folder for this project's Python packages):
 ```bash
 python -m venv .venv
 ```
-Activate it on **macOS / Linux**:
-```bash
-source .venv/bin/activate
-```
-or on **Windows (PowerShell)**:
+Activate it – **Windows (PowerShell)**:
 ```bash
 .venv\Scripts\Activate.ps1
 ```
-Install the packages:
+**macOS / Linux**:
+```bash
+source .venv/bin/activate
+```
+Your prompt now starts with `(.venv)`. If PowerShell says running scripts is disabled, run this once, answer `Y`, and activate again:
+```bash
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+## 4. Install backend dependencies
+With the virtual environment active, inside `backend/`:
 ```bash
 pip install -r requirements.txt
 ```
-Optionally copy the settings template (every setting has a default):
-```bash
-cp .env.example .env
-```
+This takes a few minutes (pandas, SciPy, scikit-learn, Matplotlib…). It ends with `Successfully installed …`.
 
-### Step 3 – frontend (Node)
-Open a **second terminal** in the project folder:
+## 5. Install frontend dependencies
+Open a **second terminal** (the `+` in the terminal panel):
 ```bash
 cd frontend
 ```
 ```bash
 npm install
 ```
+Takes 1–3 minutes. Yellow warnings are normal.
 
-## 10. Running the application
-**Terminal 1 – backend** (inside `backend/`, virtual environment activated):
+## 6. Configure environment variables
+Optional – GeneLens works without any configuration. To customise, copy the template:
+```bash
+cp backend/.env.example backend/.env
+```
+(Windows: `copy backend\.env.example backend\.env`.) Useful settings in `backend/.env`:
+
+| Variable | Purpose |
+|---|---|
+| `GENELENS_NCBI_API_KEY` | NCBI key – raises E-utilities limit from 3 to 10 requests/s (faster ClinVar & dbSNP). Free at ncbi.nlm.nih.gov/account/settings |
+| `GENELENS_DATA_DIR` | Where the database, caches, downloads and reports are stored (default `backend/data`) |
+| `GENELENS_DATABASE_URL` | Use PostgreSQL instead of SQLite (`postgresql+psycopg://…`, then `pip install "psycopg[binary]"`) |
+| `GENELENS_CACHE_TTL_HOURS` | How long API responses are cached (default 168 = 7 days) |
+
+Secrets stay in `backend/.env`, which is git-ignored and never sent to the browser. `frontend/.env` (optional) only holds `VITE_API_TARGET` if the backend runs on a port other than 8000.
+
+## 7. Run the backend
+Terminal 1, inside `backend/`, virtual environment active:
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
-The output ends with `Application startup complete.` Open http://localhost:8000/docs for the interactive API documentation.
+Ready when it prints `Application startup complete.` (the first start takes 10–20 s while scientific libraries load). Visiting `http://localhost:8000/` shows `404 Not Found` – that is expected; the API lives under `/api` and its documentation at **http://localhost:8000/docs**.
 
-**Terminal 2 – frontend** (inside `frontend/`):
+## 8. Run the frontend
+Terminal 2, inside `frontend/`:
 ```bash
 npm run dev
 ```
-Open http://localhost:5173, click **Enter Research Workspace**, type `HBB` and click **Run research pipeline**. HBB takes about 30 seconds on the first run (mostly rate-limited ClinVar retrieval) and about 2 seconds afterwards from cache.
+Ready when it prints `Local: http://localhost:5173/`. Keep **both** terminals open while using GeneLens.
 
-**Command-line pipeline (no web server):**
-```bash
-python -m scripts.run_pipeline --gene HBB
-```
+## 9. Access the application
+Open **http://localhost:5173** → **Enter Research Workspace**. Click the gene search box – eight suggested genes appear immediately – choose **HBB**, keep the dataset **gnomAD v4 – Exomes + Genomes**, and press **Run research pipeline**. The first HBB run takes about 30–60 s (rate-limited ClinVar retrieval); repeats take seconds from cache.
 
-**VS Code:** open the repository folder (*File → Open Folder…*). Accept the recommended extensions, then:
-* first time only: *Terminal → Run Task… → Setup: install everything (first time)*;
-* every time: press **Ctrl+Shift+B** (*GeneLens: start everything*) – the backend and frontend start in two terminal tabs; open http://localhost:5173;
-* debugging: *Run and Debug* (Ctrl+Shift+D) → *GeneLens API (debug)* → F5 lets you set breakpoints in the backend;
-* tests: the beaker (Testing) icon in the sidebar, or *Run Task → Backend: run tests*.
+Then explore the modules in the left sidebar, and use the **Real · Synthetic · Both** switch at the top to change which records every module displays.
 
-### Common errors
+## 10. Troubleshooting
 | Symptom | Cause / fix |
-|---------|-------------|
-| `Cannot reach the GeneLens backend` in the UI | The backend isn't running on port 8000. Start terminal 1. |
-| `ModuleNotFoundError: No module named 'app'` | Run uvicorn from inside `backend/`. |
-| `'uvicorn' is not recognized` / `command not found` | Activate the virtual environment first. |
-| PowerShell refuses to run `Activate.ps1` | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once. |
-| `Address already in use` | Another process uses the port. Start on 8001 and set `VITE_API_TARGET=http://127.0.0.1:8001` in `frontend/.env`. |
-| Analysis fails with `gnomAD: … not found` | Use an official HGNC gene symbol (the search box suggests valid ones). |
-| Analysis fails with HTTP 429/503 | The public API is rate-limiting or down. GeneLens retries with back-off; wait a minute, use cached data, or add an NCBI API key in `backend/.env`. |
-| GRCh37 dataset rejected | gnomAD v2.1/ExAC need the ClinVar TSV (`python -m scripts.download_clinvar`). |
-
-## 11. Statistical methodology
-Full detail is in [docs/methodology.md](docs/methodology.md). In brief:
-
-* **Unit of analysis:** one distinct allele. Ambiguous matches are excluded by default (toggle in the Studio); secondary ClinVar records are never double-counted; variants absent from gnomAD are *not* treated as AF = 0.
-* **AF = AC / AN**, computed only when AN > 0 and 0 ≤ AC ≤ AN (gnomAD v4 joint exome+genome counts).
-* **Descriptives:** n, mean, median, SD, min/max, quartiles and IQR, on AF and log10 AF.
-* **Group comparisons:** two-sided Mann–Whitney U on log10 AF for P/LP vs B/LB, P/LP vs VUS and VUS vs B/LB, with rank-biserial correlation and a bootstrap 95 % CI of the median difference. Shapiro–Wilk and Levene tests are reported as assumption checks.
-* **Contingency:** chi-square test of classification × AF bin with Cochran's expected-count rule and Cramér's V; Fisher's exact test of P/LP vs B/LB × (AF < 0.1 %) with the conditional odds-ratio CI.
-* **Correlation:** Spearman's ρ between log10 AF and ClinVar review stars, with a Fisher-z CI.
-* **Proportions:** Wilson score interval.
-* **Multiple testing:** Benjamini–Hochberg FDR (primary) and Bonferroni across all tests in a run.
-* **Validation:** every statistic is checked in `tests/test_statistics.py` against independent hand calculations (e.g. the exact hypergeometric Fisher p-value, the Yates-corrected chi-square, the exact Mann–Whitney p = 2/252).
-
-## 12. Synthetic data methodology
-* **Fit** (from a real analysis, matched variants only): class proportions; a 1–3 component Gaussian mixture over log10 AF per class; a normal model of log10 AN; mean population AN shares; dispersion of population AF around the global AF. Only these summary parameters are stored. No variant, coordinate or identifier is copied (tested).
-* **Sample:** class → target AF → AN → Dirichlet split of AN across populations → population AC ~ Binomial(AN, AF·noise). Global AC/AN are sums, so **AF = AC/AN always holds** (tested).
-* **Scenarios:** configurable missingness, conflicting labels and unusual frequency patterns, recorded as `simulated_*` QC flags. These serve as ground truth for evaluating the anomaly engine.
-* **Labelling:** `provenance = SYNTHETIC`, `SYN-<job>-<n>` IDs, chromosome `SYN`, "(simulated)" classification labels, and no conditions, submitters or review stars. The UI uses hatched violet styling; CSV exports carry a provenance column and a header comment. Synthetic records are stored separately and never enter real-data statistics (tested).
-* **Reproducibility:** one seeded NumPy generator per job.
-* **Comparison:** per-class KS statistic, overlaid histograms and class-mix total variation distance.
-
-## 13. Screenshots
-| | |
 |---|---|
-| ![Command Center](docs/screenshots/command-center.png) | ![Pathogenicity Lab (light theme)](docs/screenshots/pathogenicity-lab.png) |
-| ![Population Observatory](docs/screenshots/population-observatory.png) | ![Statistics Studio (light theme)](docs/screenshots/statistics-studio.png) |
-| ![Synthetic Lab](docs/screenshots/synthetic-lab.png) | ![Landing](docs/screenshots/landing.png) |
+| UI says *Cannot reach the GeneLens backend* | Terminal 1 is not running, or uvicorn was started outside `backend/`. |
+| `ModuleNotFoundError: No module named 'app'` | Run uvicorn from inside `backend/`. |
+| `'uvicorn' / 'pip' is not recognized` | Activate the virtual environment first (step 3). |
+| PowerShell refuses `Activate.ps1` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, answer `Y`. |
+| `python` / `npm` not recognized | Install Python / Node.js (see top of Part A), then open a **new** terminal. |
+| `Address already in use` / port error | Another process uses the port. Stop it, or run uvicorn with `--port 8001` and create `frontend/.env` with `VITE_API_TARGET=http://127.0.0.1:8001`. |
+| `git clone` fails with *Invalid argument* (Windows) | Clone into a folder without a trailing dot – see step 1. |
+| Ctrl+Shift+B says *No build task* | You opened `backend` or `frontend` instead of the `GeneLens` folder. |
+| An analysis fails with *not found* | Use an official gene symbol – the search box suggests valid ones. |
+| An analysis fails with HTTP 429 / 503 | A public API is rate-limiting or down. GeneLens retries automatically; check **Source Manager**, wait a minute, or add an NCBI API key. |
+| A dataset shows *unavailable* | Its provider could not be reached from your network. Press **Refresh** in the Source Manager; corporate firewalls sometimes block FTP/EBI hosts. |
+| Old database after upgrading | Nothing to do – new columns/tables are added automatically at startup. To start fresh, stop the backend and delete `backend/data/genelens.db`. |
 
-All screenshots show real HBB data from gnomAD v4 and ClinVar, retrieved 2026-11-10. The Synthetic Lab shows labelled synthetic records next to the real distribution.
+## 11. Configure and retrieve datasets
+Everything is retrieved **live, per gene**, the first time it is needed, then cached in `backend/data/cache/`. Choose the dataset in the Command Center's **Dataset** selector:
 
-## 14. API documentation
-Interactive Swagger UI: **http://localhost:8000/docs** (ReDoc at `/redoc`).
+| # | Dataset | Assembly | What is fetched for a gene |
+|---|---|---|---|
+| 1–4 | gnomAD v4 (exomes+genomes, non-UKB), v3 (genomes, non-cancer) | GRCh38 | all variants with AC/AN/AF + populations (gnomAD GraphQL) |
+| 5–7 | gnomAD v2.1 (exomes+genomes, non-cancer), ExAC | GRCh37 | same, older assembly |
+| 8 | 1000 Genomes Project – Phase 3 | GRCh37 | records in the gene region read from the official tabix-indexed VCFs (IGSR) |
+| 9 | ClinVar Variant Summary – NCBI | GRCh38 | clinical classifications only (no frequencies) |
+| 10 | dbSNP RefSNP Dataset – NCBI | GRCh38 | all RefSNPs annotated to the gene with alleles + per-study frequencies |
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/health` | Service and database health |
-| GET | `/api/sources/status` | Live reachability of gnomAD / NCBI, TSV presence |
-| GET | `/api/datasets` | Supported gnomAD datasets and genome builds |
-| GET | `/api/genes/search?q=` | Gene autocomplete (gnomAD `gene_search`) |
-| POST | `/api/analysis/run` | Start an analysis (background task), returns 202 |
-| GET | `/api/analysis/{id}/status` | Stage and progress polling |
-| GET | `/api/analysis/{id}` | Full stored results and dataset provenance |
-| GET | `/api/analysis/statistics?analysis_id=&include_ambiguous=` | Statistics (recomputed if the toggle differs) |
-| GET | `/api/analysis/populations?analysis_id=` | Population summary |
-| GET | `/api/analysis/constraint?analysis_id=` | Constraint metrics and interpretation |
-| GET | `/api/constraint/compare?genes=A,B` | Multi-gene constraint comparison |
-| GET | `/api/dashboard?analysis_id=` | Command-center metrics (computed in SQL) |
-| GET | `/api/variants` | Search / filter / sort / paginate variants |
-| GET | `/api/variants/export` | CSV export of the current filter (logged) |
-| GET | `/api/variants/{id}` | Variant detail with flags and links |
-| POST | `/api/anomalies/detect` | Re-run screening with new thresholds |
-| GET | `/api/anomalies?analysis_id=` | Paginated flags, priority-ordered |
-| POST | `/api/synthetic/generate` | Generate a synthetic dataset |
-| GET | `/api/synthetic`, `/api/synthetic/{id}` | Synthetic jobs |
-| POST | `/api/reports/generate` | PDF or CSV report |
-| GET | `/api/reports`, `/api/reports/{id}/download` | Export history and download |
-| GET | `/api/history`, `/api/history/{id}` | Saved analyses with provenance |
-| DELETE | `/api/history/{id}` | Delete an analysis and its records |
+ClinVar is always retrieved alongside (NCBI E-utilities by default). Optional bulk ClinVar file (~450 MB, for offline or large-scale work):
+```bash
+python -m scripts.download_clinvar
+```
+(run inside `backend/` with the venv active), then choose *ClinVar source → variant_summary TSV*.
 
-Errors use one JSON shape (`{"detail": …, "type": …}`): 404 not found, 409 not ready, 422 validation or assembly mismatch, 503 external source unavailable.
+Other utilities (inside `backend/`):
+```bash
+python -m scripts.run_pipeline --gene CFTR --dataset gnomad_r4
+```
+```bash
+python -m scripts.create_snapshot --gene CFTR
+```
+```bash
+python -m scripts.inspect_gnomad_schema
+```
+The repository ships a real **offline snapshot for HBB** (gnomAD v4 + ClinVar, retrieved 2026-11-10), used only if those APIs are unreachable and always labelled `offline snapshot`.
 
-## 15. Testing
+## 12. Run the tests
+**Backend** (100 tests – data cleaning, AF = AC/AN, matching, statistics validated against hand calculations, anomaly engine, synthetic generator, connectors, tabix reader, provenance separation, comparison lab, API):
 ```bash
 cd backend
 ```
 ```bash
 python -m pytest
 ```
-The suite (78 tests at the time of writing) covers:
-
-* data cleaning, AF = AC/AN, missing data and classification normalisation
-* SPDI conversion, indel normalisation and matching: exact, normalised, ambiguous, unmatched and unmatchable records, no gene-name joins, assembly mismatch
-* every statistical test, against independent calculations
-* anomaly categories and thresholds
-* synthetic data: reproducibility, internal consistency, labelling and no copying of real records
-* service caching and snapshot fallback, and report generation
-* a full end-to-end API workflow, including real/synthetic separation
-
-External APIs are replaced by clearly labelled **test fixtures** (`tests/fixtures/sample_data.py`), so the tests run offline.
-
-Frontend type-check and production build:
+**Frontend** type-check + production build:
 ```bash
 cd frontend
 ```
 ```bash
 npm run build
 ```
-GitHub Actions (`.github/workflows/ci.yml`) runs both on every push.
+**End-to-end acceptance checks** (optional, 53 browser checks – gene search, datasets, real/synthetic modes, explanations, anomaly cards, comparison lab, themes, responsiveness). With both servers running and an HBB + CFTR gnomAD v4 analysis plus one synthetic job created:
+```bash
+npm i -D playwright && npx playwright install chromium
+```
+```bash
+node e2e/smoke.cjs <HBB-analysis-id>
+```
 
-## 16. Limitations
-* ClinVar classifications are submitted assertions of varying quality, not ground truth.
-* Frequency is itself ACMG/AMP evidence, so frequency–classification associations are partly circular.
-* gnomAD is a reference sample (not disease-free) and under-represents many ancestries.
-* Matching without the reference genome relies on both sources being left-aligned; rare complex indels may remain unmatched. Haplotypes and large CNVs are reported as unmatchable.
-* Variants within a gene are not fully independent observations.
-* The gene-level gnomAD API returns all variants in one response, so very large genes (e.g. *TTN*) take longer and use more memory.
-* The synthetic generator reproduces marginal distributions, not linkage, protein structure or functional effects.
+---
 
-## 17. Future enhancements
-* Reference-sequence-based left-alignment (e.g. with a local FASTA) for full indel normalisation.
-* Regional missense constraint tracks and transcript-level views.
-* Multi-gene cohort analyses and gene-set comparisons.
-* A Celery/RQ worker for long-running jobs; PostgreSQL deployment with Docker Compose.
-* Per-submission (SCV) analysis of ClinVar conflicts.
-* User accounts and shareable read-only analysis links.
+# Part B – The project
 
-## 18. References and data attribution
+## 13. Research problem & objectives
+A variant classified as *pathogenic* for a rare Mendelian disease is usually rare in the general population. When a pathogenic variant is common – or a *benign* one is extremely rare – the combination deserves attention. Explanations include **biology** (recessive carrier frequency, reduced penetrance, founder effects, balancing selection such as the sickle-cell allele), **data quality** (low coverage, failed filters, incomplete records, ambiguous matching) or an **interpretation that merits review**.
+
+Objectives: retrieve real data with full provenance; normalise and match records allele by allele (never by gene name); compare frequencies across P / LP / VUS / LB / B with appropriate statistics; screen for unusual combinations with explainable rules, separating data-quality issues from biologically interesting observations; describe population frequencies and gene constraint without inferring individual risk; generate clearly labelled synthetic data to evaluate the screening engine; compare genes and screening scenarios; produce reproducible reports.
+
+## 14. Features – eleven modules
+| # | Module | Highlights |
+|---|---|---|
+| 01 | **Genomic Command Center** | Gene search with suggestions before typing, 10-dataset picker, 7-source status, provenance-aware metrics, gene annotation cross-check (gnomAD / Ensembl / UCSC), recent analyses (open / delete) |
+| 02 | **Variant Explorer** | Server-side search / filter / sort / pagination; Real · Synthetic · Both modes (gold/pink outlines in Both); detail drawer with on-demand **Ensembl VEP** and **dbSNP** annotation; CSV export |
+| 03 | **Pathogenicity Intelligence Lab** | Classification distribution, log-AF box plots & distributions, descriptive tables, review stars, conflicts, unusual-combination flags |
+| 04 | **Population Observatory** | Population × variant heatmap, per-group counts by class, grpmax, missing-AN indicators, filters |
+| 05 | **Gene Constraint Observatory** | pLI / LOEUF / missense-Z, o/e with CIs, multi-gene LOEUF comparison |
+| 06 | **Anomaly Detection Engine** | Rules + robust outliers + Isolation Forest; cards with reason, why it matters and recommended investigation |
+| 07 | **Statistics Studio** | Mann–Whitney, chi-square, Fisher, Spearman, Wilson CI, effect sizes, assumption checks, BH-FDR; real and synthetic computed separately |
+| 08 | **Synthetic Data Lab** | Seeded generator fitted to real distributions, scenario injection, real-vs-synthetic comparison, anomaly-engine recovery check |
+| 09 | **Gene Comparison Lab** | 2–5 genes side by side; AF threshold, classes, minimum review stars, population selection; what-if screening (previous / updated / difference / % change); save, reopen, export, download charts |
+| 10 | **Report Generator** | PDF & CSV reports; analysis history & full provenance (parameters, releases, retrieval dates, exports) |
+| 11 | **Source Manager** | Seven live connectors with method, availability, release, last connection, last retrieval, records retrieved, errors, refresh; dataset registry table |
+
+Every module has a prominent **main reason** explanation and a **"How to read this"** guide with bold terms and glossary tooltips. Light and dark themes persist; the sidebar collapses; layouts adapt from phones to wide desktops; reduced-motion is respected.
+
+## 15. Data ecosystem – 10 datasets, 7 sources
+**Sources** (`backend/app/sources/registry.py`, each with a real `probe()` and persisted statistics):
+
+| Source | Integration | Used for |
+|---|---|---|
+| gnomAD GraphQL API | GraphQL over HTTPS | datasets 1–7, gene constraint, gene search |
+| NCBI ClinVar E-utilities | esearch + esummary | clinical classifications (default); GRCh37 via ClinVar's own GRCh37 locations |
+| ClinVar Bulk TSV / FTP | `variant_summary.txt.gz` | offline / large-scale clinical analysis |
+| Ensembl REST API | REST (GRCh38 + GRCh37 servers) | gene identifiers, coordinates, canonical transcripts, VEP annotation |
+| NCBI dbSNP / Variation API | E-utilities `db=snp` + Variation Services | dataset 10, RefSNP details in the variant drawer |
+| International Genome Sample Resource | data-portal API + tabix range requests | dataset 8 (1000 Genomes phase 3), population metadata |
+| UCSC Genome Browser API | REST | assembly info, RefSeq gene coordinates, cytoband |
+
+Every dataset's availability is checked against its live provider (e.g. the gnomAD `DatasetId` enum is introspected). Assemblies are never mixed: ClinVar records are converted to GRCh37 using ClinVar's own GRCh37 location, and records without one are kept as *unmatchable* rather than guessed. Details: [docs/data_sources.md](docs/data_sources.md).
+
+## 16. Technology stack
+| Layer | Technologies |
+|---|---|
+| Frontend | React 18, TypeScript 5, Vite 5, Tailwind CSS 3, Framer Motion 11, Plotly.js (cartesian bundle), Lucide, React Router 6 |
+| Typography | DM Serif Display (headings), Manrope (body), IBM Plex Mono (identifiers) |
+| Backend | Python 3.11+, FastAPI, Pydantic v2, Uvicorn, httpx |
+| Science | pandas, NumPy, SciPy, scikit-learn, Matplotlib, Seaborn |
+| Data | SQLAlchemy 2.0, SQLite (PostgreSQL-ready), Alembic migrations + automatic column upgrade |
+| Reports | ReportLab |
+| Testing | pytest, FastAPI TestClient, Playwright (e2e) |
+
+A small pure-Python **tabix/BGZF reader** (`app/services/tabix.py`) reads gene regions from remote 1000 Genomes VCFs without native dependencies, so it works on Windows. Biopython is not needed because GeneLens works with coordinates and SPDI strings, not sequence files.
+
+## 17. Architecture
+```mermaid
+flowchart LR
+  UI[React + Vite UI<br/>11 modules] -- "/api (Vite proxy)" --> API[FastAPI /api/*]
+  API --> PIPE[Research pipeline<br/>app/pipeline/*]
+  PIPE --> DS[Dataset registry<br/>app/datasets.py]
+  DS --> SRC[Source connectors<br/>app/sources + app/services]
+  SRC --> G[(gnomAD)] & C[(ClinVar API / TSV)] & E[(Ensembl)] & D[(dbSNP)] & I[(IGSR / 1000G)] & U[(UCSC)]
+  PIPE --> DB[(SQLite / PostgreSQL)]
+  API --> DB
+```
+```
+collection → validation → preprocessing → normalisation → matching → statistics
+→ anomaly screening → visualisation data → interpretation → report
+```
+Full design, folder structure and data model: [docs/architecture.md](docs/architecture.md).
+
+## 18. Statistical methodology
+One distinct allele per observation; ambiguous matches excluded by default; variants absent from the frequency dataset are not AF = 0. AF = AC / AN only when AN > 0 and 0 ≤ AC ≤ AN. Mann–Whitney U on log10 AF (rank-biserial r, bootstrap CI of the median difference), chi-square (Cochran rule, Cramér's V), Fisher's exact (conditional OR CI), Spearman (Fisher-z CI), Wilson CI, Benjamini–Hochberg FDR + Bonferroni. Real and synthetic data are always computed separately. Every method is validated against independent calculations in `tests/test_statistics.py`. See [docs/methodology.md](docs/methodology.md).
+
+## 19. Synthetic data methodology
+Fit summary distributions from real matched variants (class mix, Gaussian mixture over log10 AF per class, AN model, population shares and dispersion – no records copied); sample populations with Binomial counts so AF = AC/AN always holds; optionally inject missingness, conflicts and unusual frequencies as ground truth; label permanently (`SYNTHETIC`, `SYN-` IDs, chromosome `SYN`, no fabricated clinical evidence); seeded and reproducible; compared to real data with KS statistics and total variation distance.
+
+## 20. Screenshots
+| | |
+|---|---|
+| ![Command Center](docs/screenshots/command-center.png) | ![Command Center – light](docs/screenshots/command-center-light.png) |
+| ![Gene search](docs/screenshots/gene-search.png) | ![Dataset picker](docs/screenshots/dataset-picker.png) |
+| ![Variant Explorer – Both mode](docs/screenshots/variant-explorer-both.png) | ![Anomaly Engine](docs/screenshots/anomaly-engine.png) |
+| ![Gene Comparison Lab](docs/screenshots/gene-comparison-lab.png) | ![Source Manager](docs/screenshots/source-manager.png) |
+| ![Pathogenicity Lab](docs/screenshots/pathogenicity-lab.png) | ![Population Observatory](docs/screenshots/population-observatory.png) |
+
+All screenshots show real data (HBB / CFTR, gnomAD v4 + ClinVar, retrieved 2026-11-10) except records explicitly labelled SYNTHETIC.
+
+## 21. API documentation
+Interactive docs: **http://localhost:8000/docs**. Main endpoints:
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | Health |
+| GET | `/api/sources` · POST `/api/sources/{id}/refresh` | Seven connectors with live status + statistics |
+| GET | `/api/sources/status` | Compact gnomAD/ClinVar status (landing page) |
+| GET | `/api/datasets` | Ten-dataset registry with live availability |
+| GET | `/api/genes/suggest?q=` · `/api/genes/search?q=` | Gene suggestions (8 starters, catalogue, live search) |
+| POST | `/api/analysis/run` | Start an analysis (any of the 10 datasets) |
+| GET | `/api/analysis/{id}` · `/status` | Results / progress |
+| GET | `/api/analysis/statistics?analysis_id=&provenance=` | Statistics; with `provenance` returns `{mode, groups}` |
+| GET | `/api/analysis/populations?analysis_id=&provenance=` | Population summary (same shape rule) |
+| GET | `/api/analysis/constraint` · `/api/constraint/compare` | Constraint |
+| GET | `/api/dashboard?analysis_id=&provenance=` | Command-center metrics per provenance group |
+| GET | `/api/variants?provenance=REAL|SYNTHETIC|BOTH` · `/export` · `/{id}` · `/{id}/annotation` | Explorer, CSV, detail, live VEP + dbSNP |
+| POST/GET | `/api/anomalies/detect` · `/api/anomalies?provenance=` | Screening; flags with headline, reason, why it matters, recommendation |
+| POST/GET | `/api/synthetic/generate` · `/api/synthetic` | Synthetic data |
+| POST | `/api/compare/run` · `/api/compare/whatif` | Gene comparison and what-if |
+| POST/GET/DELETE | `/api/compare/saved` · `/{id}` · `/{id}/export` | Saved comparisons |
+| POST/GET | `/api/reports/generate` · `/api/reports` · `/{id}/download` | Reports |
+| GET/DELETE | `/api/history` · `/api/history/{id}` | Analysis history & provenance |
+
+**API changes in this version** (backward compatible): `/api/datasets` now returns the full registry objects; `statistics`, `populations`, `dashboard`, `anomalies` and `variants` accept `provenance` (old calls without it behave as before); anomaly items include `headline`, `reason`, `why_it_matters`, `recommendation`; GRCh37 datasets now accept `clinvar_source=eutils`.
+
+## 22. Limitations
+* ClinVar classifications are submitted assertions, not ground truth; frequency is itself ACMG/AMP evidence, so frequency–classification associations are partly circular.
+* Reference datasets (gnomAD, 1000 Genomes) under-represent many ancestries and are not disease-free.
+* Matching relies on both sources being left-aligned (no reference FASTA); haplotypes, large CNVs and IUPAC-ambiguous alleles are reported as unmatchable.
+* 1000 Genomes population AC is derived as AF × AN (phase 3 genotypes are complete); dbSNP allele numbers are derived from study count ÷ frequency – both are flagged on every record.
+* dbSNP retrieval is capped at 25,000 RefSNPs per gene; very large genes take minutes without an NCBI API key.
+* Third-party APIs can rate-limit or change; GeneLens reports this honestly in the Source Manager. All connectors were tested live on 2026-11-10.
+* Synthetic data reproduces marginal distributions only, not linkage or function.
+
+## 23. Future enhancements
+Reference-FASTA left-alignment; regional missense constraint; per-submission (SCV) ClinVar conflict analysis; Docker Compose with PostgreSQL and a job queue; Playwright tests in CI.
+
+## 24. References and data attribution
 * Chen S, et al. *A genomic mutational constraint map using variation in 76,156 human genomes.* Nature 625, 92–100 (2024).
 * Karczewski KJ, et al. *The mutational constraint spectrum quantified from variation in 141,456 humans.* Nature 581, 434–443 (2020).
 * Landrum MJ, et al. *ClinVar: improvements to accessing data.* Nucleic Acids Res 48, D835–D844 (2020).
-* Richards S, et al. *Standards and guidelines for the interpretation of sequence variants (ACMG/AMP).* Genet Med 17, 405–424 (2015).
-* Benjamini Y, Hochberg Y. *Controlling the false discovery rate.* J R Stat Soc B 57, 289–300 (1995).
-* Liu FT, Ting KM, Zhou ZH. *Isolation Forest.* ICDM (2008).
-* Holmes JB, et al. *SPDI: data model for variants and applications at NCBI.* Bioinformatics 36, 1902–1907 (2020).
+* 1000 Genomes Project Consortium. *A global reference for human genetic variation.* Nature 526, 68–74 (2015); Fairley S, et al. *The International Genome Sample Resource (IGSR) collection of open human genomic variation resources.* Nucleic Acids Res 48, D941–D947 (2020).
+* Sherry ST, et al. *dbSNP: the NCBI database of genetic variation.* Nucleic Acids Res 29, 308–311 (2001).
+* Martin FJ, et al. *Ensembl 2023.* Nucleic Acids Res 51, D933–D941 (2023); McLaren W, et al. *The Ensembl Variant Effect Predictor.* Genome Biol 17, 122 (2016).
+* Nassar LR, et al. *The UCSC Genome Browser database: 2023 update.* Nucleic Acids Res 51, D1188–D1195 (2023).
+* Richards S, et al. *ACMG/AMP standards and guidelines for the interpretation of sequence variants.* Genet Med 17, 405–424 (2015).
+* Benjamini Y, Hochberg Y. J R Stat Soc B 57, 289–300 (1995); Liu FT, Ting KM, Zhou ZH. *Isolation Forest.* ICDM (2008); Li H. *Tabix.* Bioinformatics 27, 718–719 (2011).
 
-gnomAD data comes from the Genome Aggregation Database consortium (Broad Institute); ClinVar data from the National Center for Biotechnology Information. Please cite the data providers in any work that uses GeneLens output. The code is MIT-licensed; see [LICENSE](LICENSE).
+Data © their providers (Broad Institute gnomAD, NCBI, EMBL-EBI/IGSR, Ensembl, UCSC); cite them in any work using GeneLens output. Code: MIT – see [LICENSE](LICENSE).

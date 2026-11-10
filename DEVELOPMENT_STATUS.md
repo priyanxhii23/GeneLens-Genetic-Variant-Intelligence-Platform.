@@ -1,41 +1,58 @@
 # GeneLens – development status
 
-_Last updated: 2026-11-10_
+_Last updated: 2026-11-10 (major UI/UX, data-ecosystem and functionality upgrade)_
 
 ## Summary
-Phases 1–6 have been implemented in a first full pass. Backend, frontend, documentation and tests are in place, and the application was verified end-to-end against **live** gnomAD v4 and ClinVar data for HBB.
+The upgrade was implemented on top of the existing project (nothing rebuilt from scratch). All earlier modules still work; the standalone History page was folded into the Report Generator with its functionality intact. Every connector was exercised against the **live** public services on 2026-11-10.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Architecture, project structure, backend + frontend setup, design system | ✅ done |
-| 2 | gnomAD + ClinVar integration, preprocessing, normalisation, matching, validation on real data | ✅ done |
-| 3 | Statistics, anomaly detection, constraint analysis, pipeline runner | ✅ done |
-| 4 | Synthetic engine, population analysis, reports, research history | ✅ done |
-| 5 | All 10 frontend modules, animations, interactive charts, backend integration | ✅ done |
-| 6 | Tests, bug fixes, validation, performance, documentation, GitHub readiness | ✅ first pass done |
+| 1 | Inspect existing code, screenshots, and probe all new providers' real APIs | ✅ |
+| 2 | Dataset registry (10) + source registry (7 connectors) + pipeline adapters | ✅ |
+| 3 | Gene search combobox (suggestions on focus, 8 starters, keyboard, recent) | ✅ |
+| 4 | Real / Synthetic / Both modes – stripes removed, gold/pink outlines, filtering of all metrics | ✅ |
+| 5 | Explanations (Insight + Guide + glossary), anomaly cards redesign | ✅ |
+| 6 | Gene Comparison Lab (replaces History in nav; provenance kept in Report Generator) | ✅ |
+| 7 | Logo, typography, glow, animations, collapsible sidebar, Source Manager page | ✅ |
+| 8 | Testing (backend + end-to-end in a real browser) | ✅ |
+| 9 | Documentation + ZIP | ✅ |
 
-## Verified
-* `python -m pytest` in `backend/` → **78 passed**.
-* `npm run build` in `frontend/` → type-check + production build succeed.
-* Live HBB analysis via the API and the UI: 868 gnomAD variants, 1,974 ClinVar records, 489 matched (455 exact, 34 normalized), PDF report rendered (7 pages), synthetic job fitted from real data.
-* Live CFTR analysis via the CLI pipeline: 7,577 gnomAD variants, 6,600 ClinVar records, 2,912 matched (2,675 exact, 237 normalized) in 92 s on first run (≈85 s is rate-limited ClinVar retrieval without an API key; cached re-runs take seconds).
-* All 10 modules + landing page rendered in Chromium (Playwright) in dark and light themes with no console errors; phone width (390 px) has no horizontal overflow.
+## New functionality
+* **Data ecosystem** – `app/datasets.py` (10 datasets with provider, assembly, release, type, live availability); `app/sources/registry.py` (7 connectors: gnomAD GraphQL, ClinVar E-utilities, ClinVar bulk TSV, Ensembl REST, NCBI dbSNP/Variation, IGSR/1000 Genomes, UCSC) with real probes and persisted statistics (`source_status` table).
+* **New pipeline adapters** – 1000 Genomes phase 3 via a pure-Python remote tabix/BGZF reader; dbSNP RefSNP catalogue with per-study frequencies; ClinVar-only clinical dataset; GRCh37 ClinVar via E-utilities using ClinVar's own GRCh37 locations.
+* **Annotation** – gene cross-check (gnomAD vs Ensembl vs UCSC, cytoband) per analysis; on-demand Ensembl VEP + dbSNP RefSNP record in the variant drawer.
+* **Gene suggestions** – `/api/genes/suggest`: 8 starters (HBB, CFTR, BRCA1, BRCA2, TP53, LDLR, G6PD, PAH) + 55-gene catalogue with names and descriptions + live gnomAD search; data-availability and dataset-compatibility badges.
+* **Provenance modes** – statistics, populations, dashboard, anomalies and variants accept `provenance=REAL|SYNTHETIC|BOTH`; groups are always computed separately. Synthetic flags are stored per analysis with `provenance=SYNTHETIC`.
+* **Explainable flags** – every flag has headline, reason (with the exact threshold crossed), why it matters, recommended investigation.
+* **Gene Comparison Lab** – `/api/compare/run`, `/api/compare/whatif`, saved comparisons (save / reopen / export CSV / delete), chart PNG download.
+* **Frontend** – DatasetPicker, GeneCombobox, ProvenanceSwitch, Insight, Guide, Term tooltips, PriorityBadge, LogoMark; new pages Source Manager and Gene Comparison Lab; DM Serif Display / Manrope / IBM Plex Mono typography; collapsible sidebar; refined glow and motion; counters that are never stale off-screen.
 
-## Current file structure
-See [docs/architecture.md](docs/architecture.md#folder-structure).
+## Files created
+`backend/app/{datasets.py, genes.py}`, `backend/app/sources/{__init__, registry, tracking}.py`, `backend/app/services/{ensembl_client, dbsnp_client, igsr_client, tabix, ucsc_client}.py`, `backend/app/pipeline/comparison.py`, `backend/app/api/compare.py`, `backend/migrations/versions/07dd7158aaa7_*.py`, `backend/tests/test_upgrade.py`, `frontend/src/components/{DatasetPicker, GeneCombobox, ProvenanceSwitch}.tsx`, `frontend/src/lib/{provenance.tsx, glossary.ts}`, `frontend/src/pages/workspace/{GeneComparisonLab, SourceManager, ProvenanceHistory}.tsx`, `frontend/e2e/smoke.cjs`, `.vscode/tasks.json`.
 
-## Known issues / remaining work
-1. **Large genes**: TTN/BRCA2-scale genes have not been benchmarked in the UI; ClinVar E-utilities retrieval for ~20k records takes about a minute without an NCBI API key.
-2. **Indel normalisation** relies on both sources being left-aligned (no reference FASTA). A FASTA-based normaliser would recover remaining complex indels.
-3. **GRCh37 path** (gnomAD v2.1 + ClinVar TSV) is implemented and unit-tested with a synthetic TSV, but has not been run against the full 450 MB TSV in this environment.
-4. **Background jobs** run in FastAPI's thread pool; a dedicated worker queue would be needed for multi-user deployment.
-5. Frontend has no automated UI tests yet (verified manually with Playwright screenshots).
-6. Synthetic generator: the lowest-AF tail is slightly under-represented (KS ≈ 0.2–0.26 vs real HBB), because AF granularity depends on AN; reported transparently in the comparison panel.
+## Files modified
+Backend: `models.py`, `database.py` (automatic column upgrade), `schemas.py`, `main.py`, `api/{analysis, anomalies, synthetic, system, variants}.py`, `pipeline/{anomalies, interpretation, matching, preprocessing, reports, runner, statistics}.py`, `services/{clinvar_client, gnomad_client}.py`, `scripts/*`, HBB snapshots (regenerated), tests. Frontend: `index.css`, `tailwind.config.js`, `index.html`, `main.tsx`, `lib/{api, types}.ts`, `components/{ui, Sidebar, Workspace}.tsx`, every workspace page, `Landing.tsx`. Removed: `pages/workspace/History.tsx` (route redirects to Report Generator). Docs: README, architecture, methodology, data_sources.
 
-## Next exact steps
-1. Run BRCA1 end-to-end in the UI and record its runtime here.
-2. Add Playwright smoke tests for the 10 modules to CI.
-3. Add optional reference-FASTA left-alignment to `normalization.py`.
+## Tests executed (all actually run)
+* `python -m pytest` (backend): **100 passed** – includes 22 new tests for registries, connector parsers, tabix/BGZF, GRCh37 conversion, dbSNP derivation, 1000G VCF parsing, explanations, provenance separation, comparison/what-if, saved comparisons, gene suggestions, source statistics and database auto-upgrade.
+* `npm run build` (frontend): type-check + production build succeed.
+* `node e2e/smoke.cjs` against live servers with real HBB + CFTR analyses and a synthetic job: **53/53 checks passed** (logo size, nav, fonts, suggestions before typing, filtering, keyboard selection, Escape, 10 datasets with status, description, REAL/SYNTHETIC/BOTH filtering, gold/pink outlines only in BOTH, no stripes anywhere, record counts and metrics change with mode, explanation font sizes, guides, anomaly cards without raw JSON, technical evidence in details, 7 source cards, comparison + what-if update + save, provenance history, theme persistence, no horizontal overflow at 1280/1024/768 px, no console errors).
+* Live pipeline runs: HBB on gnomAD v4 / v2.1 (GRCh37, E-utilities), 1000 Genomes, dbSNP, ClinVar-only; CFTR on gnomAD v4. All completed.
+
+Bugs found and fixed during testing: frequency rows with invalid alleles had no key (dbSNP IUPAC codes); flag reason misstated which threshold triggered; Source Manager card footer overflowed at 1280 px; Comparison Lab listed "Synthetic" as a real data source; animated counters could show stale values when updated off-screen; what-if panel now shows a "Recalculating…" state.
+
+## Known issues / limitations
+1. Comparison and what-if requests load each gene's stored rows (~1–2.5 s for CFTR-sized genes); an in-memory row cache would speed this up.
+2. 1000 Genomes chrX/Y/MT records carry no per-population AN (haploid/mixed ploidy), so population breakdowns are empty for genes such as G6PD on that dataset.
+3. GRCh37 conversion of E-utilities ClinVar records assumes no assembly-level indel within the variant; such rare records may fall back to *unmatchable*.
+4. dbSNP retrieval is capped at 25,000 RefSNPs/gene and takes minutes for large genes without an NCBI API key.
+5. The full 450 MB ClinVar TSV route is unit-tested with a small file but was not downloaded end-to-end in this environment.
+6. The Playwright e2e script is not yet part of CI.
+
+## Remaining / next steps
+1. Add the e2e script to GitHub Actions with a seeded fixture database.
+2. Cache analysis rows in memory for the Comparison Lab.
+3. Optional reference-FASTA left-alignment for complex indels.
 4. Docker Compose (API + PostgreSQL + static frontend).
 
 ## How to resume
@@ -43,12 +60,9 @@ See [docs/architecture.md](docs/architecture.md#folder-structure).
 cd backend
 ```
 ```bash
-source .venv/bin/activate
-```
-```bash
 python -m pytest
 ```
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
-In a second terminal: `cd frontend && npm run dev`, then open http://localhost:5173.
+Second terminal: `cd frontend` then `npm run dev`, open http://localhost:5173 – or press **Ctrl+Shift+B** in VS Code.
