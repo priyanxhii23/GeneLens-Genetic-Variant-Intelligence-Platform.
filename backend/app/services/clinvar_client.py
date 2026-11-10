@@ -17,7 +17,9 @@ Both routes produce identical standardised records (see ``CLINVAR_FIELDS``).
 from __future__ import annotations
 
 import logging
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +28,7 @@ import pandas as pd
 from app.config import get_settings
 from app.services.cache import DiskCache
 from app.services.http import ExternalServiceError, request_with_retry
+from app.sources.tracking import record_error, record_retrieval
 
 log = logging.getLogger(__name__)
 
@@ -107,6 +110,10 @@ def parse_esummary_record(rec: dict) -> dict:
                 pos = int(loc["start"]) if loc.get("start", "").isdigit() else None
                 coordinate_source = "location_only"
     last_eval = (germ.get("last_evaluated") or "").split(" ")[0] or None
+    locs = {}
+    for loc in vset.get("variation_loc") or []:
+        if loc.get("assembly_name") in ("GRCh38", "GRCh37") and str(loc.get("start", "")).isdigit():
+            locs[loc["assembly_name"]] = {"chr": loc.get("chr"), "start": int(loc["start"])}
     return {
         "clinvar_variation_id": str(rec.get("uid")),
         "clinvar_allele_id": str(vset.get("measure_id")) if vset.get("measure_id") else None,
@@ -121,7 +128,36 @@ def parse_esummary_record(rec: dict) -> dict:
         "name": rec.get("title"),
         "rsid": f"rs{rsids[0]}" if rsids else None,
         "coordinate_source": coordinate_source,
+        "locations": locs,
     }
+
+
+def to_grch37(rec: dict) -> dict:
+    """Express an E-utilities ClinVar record (GRCh38 SPDI alleles) in GRCh37 coordinates.
+
+    ClinVar reports the variant's start on both assemblies. Their difference is
+    the local GRCh38→GRCh37 coordinate offset, applied to the SPDI-derived
+    position; alleles are unchanged (the reference strand is the same). Records
+    without both locations, or whose chromosome differs, get no coordinates
+    and become *unmatchable* – they are never guessed.
+    """
+    out = dict(rec)
+    locs = rec.get("locations") or {}
+    l38, l37 = locs.get("GRCh38"), locs.get("GRCh37")
+    if rec.get("pos") is None or not (l38 and l37) or str(l38.get("chr")) != str(l37.get("chr")):
+        out.update(pos=None, ref=None, alt=None, coordinate_source=(
+            rec.get("coordinate_source") if rec.get("coordinate_source") == "multi_allele_record"
+            else "no_grch37_location"))
+        return out
+    out["pos"] = rec["pos"] + (l37["start"] - l38["start"])
+    out["coordinate_source"] = "grch37_location_offset"
+    return out
+
+
+# Shared across clients/threads so concurrent batches still respect NCBI's request-rate policy.
+_THROTTLE_LOCK = threading.Lock()
+_LAST_START = [0.0]
+MAX_IN_FLIGHT = 3
 
 
 class ClinVarClient:
@@ -144,10 +180,12 @@ class ClinVarClient:
         return p
 
     def _throttle(self):
-        wait = self.min_interval - (time.monotonic() - self._last)
-        if wait > 0:
-            time.sleep(wait)
-        self._last = time.monotonic()
+        """Space request *starts* by ``min_interval`` (NCBI: ≤3 req/s without key, ≤10 with). Thread-safe."""
+        with _THROTTLE_LOCK:
+            wait = self.min_interval - (time.monotonic() - _LAST_START[0])
+            if wait > 0:
+                time.sleep(wait)
+            _LAST_START[0] = time.monotonic()
 
     def _get(self, endpoint: str, method: str = "GET", **params) -> dict:
         self._throttle()
@@ -164,7 +202,7 @@ class ClinVarClient:
     # -- E-utilities --------------------------------------------------------
     def fetch_gene_eutils(self, symbol: str, progress=None) -> tuple[list[dict], dict]:
         symbol = symbol.upper()
-        key = DiskCache.key("eutils_gene", symbol)
+        key = DiskCache.key("eutils_gene_v2", symbol)
         hit = self.cache.get(key)
         if hit:
             return hit["payload"], {**hit["meta"], "access_mode": "cache"}
@@ -174,6 +212,7 @@ class ClinVarClient:
         except ExternalServiceError as exc:
             from app.services.gnomad_client import load_snapshot
 
+            record_error("clinvar_eutils", str(exc))
             if exc.status_code == 404:
                 raise
             snap = load_snapshot(symbol, "clinvar", "esummary")
@@ -189,15 +228,23 @@ class ClinVarClient:
             raise ExternalServiceError(self.service, search["ERROR"])
         total = int(search.get("count", 0))
         webenv, qkey = search.get("webenv"), search.get("querykey")
-        records: list[dict] = []
-        for start in range(0, total, self.BATCH):
+        # Batches are fetched concurrently (≤3 in flight); the shared throttle keeps request
+        # starts within NCBI's rate limit. Results are re-assembled in order.
+        starts = list(range(0, total, self.BATCH))
+        done = [0]
+
+        def fetch(start: int) -> list[dict]:
             body = self._get("esummary.fcgi", method="POST", WebEnv=webenv, query_key=qkey,
                              retstart=start, retmax=self.BATCH)
             result = body.get("result") or {}
-            for uid in result.get("uids", []):
-                records.append(parse_esummary_record(result[uid]))
+            out = [parse_esummary_record(result[uid]) for uid in result.get("uids", [])]
+            done[0] += 1
             if progress:
-                progress(min(1.0, (start + self.BATCH) / max(total, 1)))
+                progress(min(1.0, done[0] / max(len(starts), 1)))
+            return out
+
+        with ThreadPoolExecutor(max_workers=MAX_IN_FLIGHT) as ex:
+            records = [r for batch in ex.map(fetch, starts) for r in batch]
         meta = {
             "retrieved_at": datetime.now(timezone.utc).isoformat(),
             "access_mode": "live_api",
@@ -207,6 +254,7 @@ class ClinVarClient:
             "total_reported": total,
         }
         self.cache.set(key, records, meta)
+        record_retrieval("clinvar_eutils", len(records))
         return records, meta
 
     # -- Bulk TSV ---------------------------------------------------------------
@@ -214,7 +262,7 @@ class ClinVarClient:
     def tsv_path(self) -> Path:
         return self.settings.raw_dir / "variant_summary.txt.gz"
 
-    def download_tsv(self, force: bool = False, progress=None) -> Path:
+    def download_tsv(self, force: bool = False, progress=None, byte_progress=None) -> Path:
         """Stream the official variant_summary.txt.gz to the raw data directory."""
         import httpx
 
@@ -233,6 +281,8 @@ class ClinVarClient:
                     done += len(chunk)
                     if progress and total:
                         progress(done / total)
+                    if byte_progress:
+                        byte_progress(done, total or None)
         tmp.replace(path)
         return path
 
@@ -263,6 +313,8 @@ class ClinVarClient:
             df.to_csv(cache_file, index=False)
             mode = "local_tsv"
         records = [tsv_row_to_record(r) for r in df.to_dict("records")]
+        if mode == "local_tsv":
+            record_retrieval("clinvar_tsv", len(records))
         meta = {
             "retrieved_at": datetime.fromtimestamp(src.stat().st_mtime, timezone.utc).isoformat(),
             "access_mode": mode,

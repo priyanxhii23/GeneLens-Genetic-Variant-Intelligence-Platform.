@@ -1,6 +1,6 @@
 """Download the official ClinVar variant_summary.txt.gz (~450 MB) into the raw data directory.
 
-Only needed for the bulk-TSV ClinVar mode (required for GRCh37 analyses).
+Only needed for the bulk-TSV ClinVar mode (offline / large-scale ClinVar analysis).
 Usage:  python -m scripts.download_clinvar [--force]
 """
 from __future__ import annotations

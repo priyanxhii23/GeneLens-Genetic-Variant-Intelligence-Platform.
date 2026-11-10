@@ -2,10 +2,10 @@ import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import Plot from "../../components/Plot";
-import { ErrorState, Explain, HelixLoader, NeedsAnalysis, PageHeader, Panel, stagger } from "../../components/ui";
+import { ErrorState, Guide, GuideItem, HelixLoader, Insight, NeedsAnalysis, PageHeader, Panel, stagger, Term } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAnalysis, useFetch } from "../../lib/analysis";
-import { fmtNum, token } from "../../lib/format";
+import { fmtInt, fmtNum, token } from "../../lib/format";
 
 function Scale({ label, value, min, max, threshold, lowGood, hint }: { label: string; value: number | null | undefined; min: number; max: number; threshold: number; lowGood?: boolean; hint: string }) {
   const pos = value === null || value === undefined ? null : Math.min(1, Math.max(0, (value - min) / (max - min)));
@@ -24,6 +24,28 @@ function Scale({ label, value, min, max, threshold, lowGood, hint }: { label: st
     </div>
   );
 }
+
+const CONSTRAINT_ROWS: [string, string, string][] = [
+  ["pli", "pLI", "Probability of being loss-of-function intolerant"],
+  ["oe_lof", "LoF o/e", "Observed / expected loss-of-function variants"],
+  ["oe_lof_lower", "LoF o/e lower 90% bound", "Lower confidence bound"],
+  ["oe_lof_upper", "LOEUF", "Upper 90% bound of LoF o/e (lower = more constrained)"],
+  ["lof_z", "LoF Z", "Depletion of LoF variants as a Z-score"],
+  ["obs_lof", "Observed LoF", "Count of observed LoF variants"],
+  ["exp_lof", "Expected LoF", "Expected count under the mutational model"],
+  ["oe_mis", "Missense o/e", "Observed / expected missense variants"],
+  ["oe_mis_lower", "Missense o/e lower", "Lower 90% bound"],
+  ["oe_mis_upper", "Missense o/e upper", "Upper 90% bound"],
+  ["mis_z", "Missense Z", "Depletion of missense variants as a Z-score"],
+  ["obs_mis", "Observed missense", "Count of observed missense variants"],
+  ["exp_mis", "Expected missense", "Expected missense count"],
+  ["oe_syn", "Synonymous o/e", "Should be close to 1 (model calibration check)"],
+  ["oe_syn_lower", "Synonymous o/e lower", "Lower 90% bound"],
+  ["oe_syn_upper", "Synonymous o/e upper", "Upper 90% bound"],
+  ["syn_z", "Synonymous Z", "Large |Z| suggests a model/coverage issue"],
+  ["obs_syn", "Observed synonymous", "Count of observed synonymous variants"],
+  ["exp_syn", "Expected synonymous", "Expected synonymous count"],
+];
 
 export default function ConstraintObservatory() {
   const { analysisId, detail } = useAnalysis();
@@ -78,7 +100,7 @@ export default function ConstraintObservatory() {
             <Scale label="LOEUF" value={num("oe_lof_upper")} min={0} max={2} threshold={0.6} lowGood hint="Upper 90% bound of LoF o/e; lower = more constrained (v4 guidance < 0.6)." />
             <Scale label="Missense Z" value={num("mis_z")} min={-4} max={8} threshold={3.09} hint="Positive = fewer missense than expected; ≥ 3.09 often called constrained." />
           </div>
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="layout-halves">
             <Panel eyebrow="observed / expected with 90% CI" title="Constraint ratios">
               <Plot data={oe} height={260} layout={{ xaxis: { title: { text: "observed / expected" }, rangemode: "tozero" }, showlegend: false,
                 shapes: [{ type: "line", x0: 1, x1: 1, yref: "paper", y0: 0, y1: 1, line: { color: token("faint"), dash: "dot", width: 1 } }] }} />
@@ -87,10 +109,24 @@ export default function ConstraintObservatory() {
               <Plot data={obsExp} height={260} layout={{ barmode: "group", bargap: 0.35, bargroupgap: 0.08, yaxis: { title: { text: "variants" } } }} />
             </Panel>
           </div>
-          <Panel eyebrow="interpretation" title={`What the metrics say about ${gene}`}>
-            <ul className="space-y-2 text-sm">{c.interpretation?.map((l) => <li key={l} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-accent" />{l}</li>)}</ul>
-            <p className="mt-3 text-xs text-warn">{c.disclaimer}</p>
+          <Panel eyebrow="all metrics" title="Every constraint metric reported for this gene">
+            <div className="overflow-x-auto scrollbar-thin"><table className="w-full min-w-[560px] text-[13.5px]">
+              <thead><tr>{["Metric", "Value", "Meaning", "Status"].map((h) => <th key={h} className="table-head">{h}</th>)}</tr></thead>
+              <tbody>{CONSTRAINT_ROWS.map(([k, label, meaning]) => { const v = num(k); return (
+                <tr key={k} className="border-t border-line/60"><td className="table-cell"><b>{label}</b><div className="font-mono text-[11px] text-faint">{k}</div></td>
+                  <td className="table-cell data">{v === null ? "—" : Number.isInteger(v) ? fmtInt(v) : fmtNum(v, 3)}</td>
+                  <td className="table-cell text-muted">{meaning}</td>
+                  <td className="table-cell">{v === null ? <span className="chip border-line text-faint">not available in source record</span> : <span className="chip border-good/40 text-good">retrieved</span>}</td></tr>); })}</tbody>
+            </table></div>
+            <p className="mt-2 text-[13px] text-muted">Source: gnomAD constraint (release as listed in the Source Manager). Values are retrieved, not calculated by GeneLens.</p>
           </Panel>
+          <Insight label={`What the metrics say about ${gene}`}
+            reason={(num("pli") ?? 0) >= 0.9 || (num("oe_lof_upper") ?? 9) < 0.6
+              ? `${gene} is depleted of loss-of-function variants in the general population – a sign of strong selective constraint.`
+              : `${gene} shows no strong depletion of loss-of-function variants (pLI ${fmtNum(num("pli"), 2)}, LOEUF ${fmtNum(num("oe_lof_upper"), 3)}).`}>
+            <ul className="space-y-1.5">{c.interpretation?.map((l) => <li key={l} className="flex gap-2"><span className="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-accent" /><span>{l}</span></li>)}</ul>
+            <p><b>Important:</b> {c.disclaimer}</p>
+          </Insight>
         </>
       )}
 
@@ -109,9 +145,14 @@ export default function ConstraintObservatory() {
         </div>
       </Panel>
 
-      <Explain title="What each metric means">
-        {Object.values(c.docs ?? {}).map((d) => <p key={d.name}><b className="text-ink">{d.name}.</b> {d.meaning} <i>Caveat: {d.caveat}</i></p>)}
-      </Explain>
+      <Guide title="What each constraint metric means">
+        <GuideItem term={<><Term k="pLI">pLI</Term> – probability of loss-of-function intolerance</>}>A probability from 0 to 1 that the gene cannot tolerate losing <b>one</b> working copy. Values <b>≥ 0.9</b> place a gene in the "LoF-intolerant" class. Example: a pLI of 0.99 means the gene behaves like genes where one broken copy is usually harmful.</GuideItem>
+        <GuideItem term={<><Term k="LOEUF">LOEUF</Term> – LoF observed/expected upper bound</>}>Compares how many <Term k="LoF">loss-of-function</Term> variants are <b>observed</b> in healthy reference people with how many are <b>expected</b> from mutation rates. <b>Lower LOEUF = stronger constraint</b>: damaging variants are missing because natural selection removed them. gnomAD v4 suggests <b>LOEUF &lt; 0.6</b> as constrained.</GuideItem>
+        <GuideItem term={<><Term k="o/e">Observed / expected</Term> with 90% CI</>}>A ratio of 1 means "as many variants as expected". The bar shows the 90% confidence interval; its right end is LOEUF for LoF variants. Small genes have wide intervals because few variants are expected.</GuideItem>
+        <GuideItem term="Missense Z and synonymous o/e"><b>Missense Z</b> above 3.09 indicates fewer missense variants than expected. <b>Synonymous o/e</b> should be near 1 because synonymous changes are mostly neutral – it acts as a calibration check.</GuideItem>
+        <GuideItem term="Why constraint is not a disease prediction">Constraint is a <b>gene-level</b> summary of natural selection in a population sample. A constrained gene can still carry harmless variants, and an unconstrained gene (like HBB) can cause severe <b>recessive</b> disease, because carriers with one working copy are healthy.</GuideItem>
+        <GuideItem term="Where the numbers come from">gnomAD's constraint model for the gene's canonical transcript (v4 for GRCh38 datasets, v2.1.1 for GRCh37 datasets), retrieved from the gnomAD GraphQL API.</GuideItem>
+      </Guide>
     </motion.div>
   );
 }

@@ -62,6 +62,10 @@ def match_variants(gnomad: list[dict], clinvar: list[dict], gnomad_genome: str,
 
     candidates: dict[int, list[tuple[str, dict]]] = defaultdict(list)
     rows: list[dict] = []
+    for i, g in enumerate(gnomad):
+        if not g.get("coords_valid"):  # e.g. IUPAC ambiguity codes (Y, R…) in dbSNP alleles
+            g["vcf_key"] = f"{(g.get('source') or 'freq').lower()}:{g.get('rsid') or i}:{g.get('ref')}>{g.get('alt')}"
+            g["qc_flags"] = sorted(set(g.get("qc_flags") or []) | {"invalid_allele_representation"})
     for c in clinvar:
         if not c.get("coords_valid"):
             rows.append(_clinvar_row(c, "unmatchable", "no_allele_level_coordinates"))

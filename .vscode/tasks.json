@@ -1,0 +1,80 @@
+{
+  // Run with: Terminal → Run Task…  (or Ctrl+Shift+B for "GeneLens: start everything")
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "GeneLens: start everything",
+      "detail": "Starts the backend API (port 8000) and the frontend (port 5173) side by side",
+      "dependsOn": ["Backend: start API", "Frontend: start dev server"],
+      "dependsOrder": "parallel",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: start API",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "command": ".venv/bin/python -m uvicorn app.main:app --reload --port 8000",
+      "windows": { "command": ".venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --port 8000" },
+      "isBackground": true,
+      "presentation": { "group": "genelens", "panel": "dedicated" },
+      "problemMatcher": {
+        "owner": "uvicorn",
+        "pattern": { "regexp": "^__never_matches__$" },
+        "background": { "activelyMatching": true, "beginsPattern": "Will watch for changes|Started server process", "endsPattern": "Application startup complete" }
+      }
+    },
+    {
+      "label": "Frontend: start dev server",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "command": "npm run dev",
+      "isBackground": true,
+      "presentation": { "group": "genelens", "panel": "dedicated" },
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^__never_matches__$" },
+        "background": { "activelyMatching": true, "beginsPattern": "vite|VITE", "endsPattern": "Local:" }
+      }
+    },
+    {
+      "label": "Setup: install everything (first time)",
+      "detail": "Creates backend/.venv, installs Python packages, then installs npm packages",
+      "dependsOn": ["Setup: backend packages", "Setup: frontend packages"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      "label": "Setup: backend packages",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "command": "python3 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt",
+      "windows": { "command": "python -m venv .venv; .venv\\Scripts\\python.exe -m pip install -r requirements.txt" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Setup: frontend packages",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "command": "npm install",
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: run tests",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "command": ".venv/bin/python -m pytest",
+      "windows": { "command": ".venv\\Scripts\\python.exe -m pytest" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: run pipeline for HBB (CLI)",
+      "type": "shell",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "command": ".venv/bin/python -m scripts.run_pipeline --gene HBB",
+      "windows": { "command": ".venv\\Scripts\\python.exe -m scripts.run_pipeline --gene HBB" },
+      "problemMatcher": []
+    }
+  ]
+}

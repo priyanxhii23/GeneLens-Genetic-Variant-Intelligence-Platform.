@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_analysis_or_404
 from app.config import get_settings
 from app.database import get_db
-from app.models import AnomalyResult, ExportRecord
-from app.pipeline.reports import build_csv_report, build_pdf
+from app.models import AnomalyResult, ExportRecord, SyntheticJob
+from app.pipeline.reports import build_csv_report, build_json_report, build_pdf
 from app.schemas import AnalysisSummary, DatasetMetaOut, ExportOut, ReportRequest
 
 router = APIRouter(tags=["reports"])
@@ -34,6 +34,16 @@ def generate_report(req: ReportRequest, db: Session = Depends(get_db)):
         order = {"high": 0, "medium": 1, "low": 2}
         flags.sort(key=lambda f: order[f["priority"]])
         build_pdf(path, analysis, datasets, flags)
+    elif req.format == "json":
+        flags = [{"variant_key": f.variant_key, "priority": f.priority, "category": f.category,
+                  "why_flagged": f.reason or f.explanation, "what_this_means": f.why_it_matters,
+                  "recommended_next_step": f.recommendation, "headline": f.headline, "provenance": f.provenance}
+                 for f in db.scalars(select(AnomalyResult).where(AnomalyResult.analysis_id == a.id)
+                                     .order_by(AnomalyResult.score.desc()).limit(1000))]
+        jobs = [{"id": j.id, "n_records": j.n_records, "seed": j.seed, "parameters": j.parameters,
+                 "comparison": j.comparison, "created_at": j.created_at}
+                for j in db.scalars(select(SyntheticJob).where(SyntheticJob.source_analysis_id == a.id))]
+        build_json_report(path, analysis, datasets, flags, jobs)
     else:
         build_csv_report(path, analysis, datasets)
     rec = ExportRecord(analysis_id=a.id, kind=f"{req.format}_report", filename=fname, path=str(path),
@@ -56,7 +66,8 @@ def download(export_id: str, db: Session = Depends(get_db)):
     rec = db.get(ExportRecord, export_id)
     if rec is None:
         raise HTTPException(404, "Export not found")
-    media = "application/pdf" if rec.filename.endswith(".pdf") else "text/csv"
+    media = ("application/pdf" if rec.filename.endswith(".pdf") else
+             "application/json" if rec.filename.endswith(".json") else "text/csv")
     try:
         return FileResponse(rec.path, media_type=media, filename=rec.filename)
     except FileNotFoundError as exc:  # pragma: no cover

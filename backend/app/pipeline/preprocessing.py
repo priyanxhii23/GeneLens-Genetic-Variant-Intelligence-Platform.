@@ -202,6 +202,24 @@ def preprocess_gnomad(gene: dict) -> list[dict]:
     return [flatten_gnomad_variant(v, symbol) for v in gene.get("variants") or []]
 
 
+FREQUENCY_NOT_REPORTED = {"no_population_frequency", "frequency_not_reported_for_allele"}
+
+
+def preprocess_frequency_rows(rows: list[dict]) -> list[dict]:
+    """Validate + normalise already-flattened rows from 1000 Genomes or dbSNP adapters."""
+    out = []
+    for r in rows:
+        qc = list(r.get("qc_flags") or [])
+        if not (FREQUENCY_NOT_REPORTED & set(qc)):  # absent frequency is not a data-quality defect
+            qc += check_counts(r.get("ac"), r.get("an"))
+            if r.get("an") and r.get("ac") is not None and r.get("af") is None:
+                r = {**r, "af": compute_af(r["ac"], r["an"])}
+        if r.get("gnomad_filters"):
+            qc.append("failed_gnomad_filter")
+        out.append(normalize_record({**r, "qc_flags": sorted(set(qc))}))
+    return out
+
+
 def preprocess_clinvar(records: list[dict]) -> list[dict]:
     out = []
     for r in records:

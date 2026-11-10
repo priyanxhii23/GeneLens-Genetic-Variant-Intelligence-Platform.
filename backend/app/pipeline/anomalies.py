@@ -195,9 +195,131 @@ def detect_anomalies(rows: list[dict], thresholds: dict | None = None) -> dict:
     if t.use_isolation_forest:
         flags += isolation_forest(rows, t)
     flags.sort(key=lambda f: (PRIORITY_RANK[f["priority"]], f["score"]), reverse=True)
+    enrich(flags, rows)
     summary: dict = {"total": len(flags), "by_category": {}, "by_kind": {}, "by_priority": {},
                      "flagged_variants": len({f["variant_key"] for f in flags})}
     for f in flags:
         for k, field in (("by_category", "category"), ("by_kind", "kind"), ("by_priority", "priority")):
             summary[k][f[field]] = summary[k].get(f[field], 0) + 1
     return {"thresholds": asdict(t), "summary": summary, "flags": flags}
+
+
+# ---------------------------------------------------------------------------
+# Plain-language presentation of each flag (headline · reason · why · next step)
+# ---------------------------------------------------------------------------
+CATEGORY_TEXT: dict[str, tuple[str, str, str]] = {
+    "frequent_pathogenic": (
+        "Relatively frequent pathogenic classification",
+        "An allele frequency that is high for a given disease can be evidence against pathogenicity, so this "
+        "combination merits a closer look. However, frequency alone cannot establish misclassification: "
+        "recessive inheritance (healthy heterozygous carriers), reduced penetrance, founder effects, disease "
+        "prevalence and balancing selection can all explain a pathogenic allele being common in some populations.",
+        "Review the ClinVar submission history, the condition's inheritance pattern and prevalence, a "
+        "condition-specific maximum credible allele frequency, and frequency in the population with the highest AF."),
+    "ba1_frequency_non_benign": (
+        "Very common variant without a benign classification",
+        "The ACMG/AMP guidelines treat an allele frequency above 5% (criterion BA1) as stand-alone evidence that a "
+        "variant is benign for rare Mendelian disease. A non-benign classification at this frequency is unusual, "
+        "although gene- and population-specific exceptions exist.",
+        "Check whether the classification concerns a rare disease, whether the frequency is driven by one "
+        "population, and whether a newer ClinVar submission reflects population data."),
+    "rare_benign": (
+        "Very rare variant classified as benign",
+        "Benign classifications are often based on functional assays, segregation or computational evidence "
+        "rather than frequency, so a rare benign variant is usually expected. It is listed so the frequency "
+        "evidence can be seen alongside the classification.",
+        "No action is usually needed. If relevant, review which evidence the submitters used for the benign call."),
+    "conflicting_interpretation": (
+        "Conflicting clinical interpretations",
+        "Laboratories can disagree because they use different evidence, interpretation criteria, dates or "
+        "condition definitions. The disagreement should be examined before drawing any conclusion about the variant.",
+        "Review the ClinVar review status, each submitter's evidence and date, and condition-specific classifications."),
+    "incomplete_frequency_record": (
+        "Frequency record is incomplete",
+        "Without a usable allele number (AN) the allele frequency cannot be calculated. Missing AN is not the same "
+        "as a frequency of zero – the site may simply be poorly covered in the reference data.",
+        "Check coverage for this position in the source browser before using its frequency."),
+    "count_inconsistency": (
+        "Allele counts are internally inconsistent",
+        "The reported numbers do not agree with each other (for example AF ≠ AC/AN, or AC > AN). This points to a "
+        "data or processing problem rather than biology.",
+        "Compare the record with the source database and re-run the analysis; report persistent errors upstream."),
+    "gnomad_qc_filter": (
+        "Variant fails a quality filter",
+        "The frequency dataset marks this site as failing a quality-control filter in at least one call set, so its "
+        "frequency estimate may be unreliable.",
+        "Treat the frequency cautiously; check the filter reason and read depth in the source browser."),
+    "low_allele_number": (
+        "Lower sequencing coverage than the rest of the gene",
+        "A small allele number means fewer individuals were confidently genotyped here, so the frequency estimate is "
+        "less precise than for other variants in the gene.",
+        "Prefer frequency estimates with larger allele numbers, or check coverage in the source browser."),
+    "incomplete_clinvar_record": (
+        "ClinVar record lacks allele-level coordinates",
+        "Without exact chromosome, position and alleles the record cannot be matched to a population-frequency "
+        "record. GeneLens never matches by gene name alone.",
+        "Open the ClinVar record to see how the variant is described (e.g. a large deletion or protein-only notation)."),
+    "ambiguous_match": (
+        "Ambiguous database match",
+        "More than one ClinVar record maps to this allele with different classifications, or the allele maps to "
+        "several frequency records. Such matches are excluded from statistical tests by default.",
+        "Inspect the linked ClinVar records and decide which interpretation applies to your question."),
+    "frequency_outlier_within_class": (
+        "Unusual frequency for its classification group",
+        "Compared with other variants in the same classification group in this gene, this variant's frequency is "
+        "far from the typical value (robust z-score). This is a statistical observation, not an interpretation.",
+        "Look at the variant in context: its consequence, population distribution and review status."),
+    "multivariate_outlier": (
+        "Uncommon combination of features",
+        "An Isolation Forest model found that this variant's combination of frequency, allele number, population "
+        "skew, classification and review stars is rare within this gene.",
+        "Use it as a pointer for manual inspection; the model gives no biological interpretation."),
+}
+
+
+def _fmt_pct(af):
+    return "n/a" if af is None else (f"{af:.2e}" if af < 1e-4 else f"{af:.2%}")
+
+
+def describe_flag(f: dict, row: dict) -> dict:
+    """Return headline / reason / why_it_matters / recommendation for one flag."""
+    headline, why, rec = CATEGORY_TEXT.get(f["category"], (f["category"].replace("_", " ").capitalize(), "", ""))
+    ev = f.get("evidence") or {}
+    sig = row.get("clinical_significance") or "unclassified"
+    af = row.get("af")
+    cat = f["category"]
+    if cat == "frequent_pathogenic":
+        th = ev.get("thresholds", {})
+        crossed = []
+        if af is not None and af >= th.get("af", 1):
+            crossed.append(f"its overall allele frequency of {_fmt_pct(af)} exceeds the {th['af']:.2%} screening threshold")
+        if (ev.get("popmax_af") or 0) >= th.get("popmax_af", 1):
+            crossed.append(f"its frequency in the {ev.get('popmax_population')} group ({_fmt_pct(ev['popmax_af'])}) "
+                           f"exceeds the {th['popmax_af']:.2%} population threshold")
+        reason = (f"The variant is classified \"{sig}\" in ClinVar, but " + " and ".join(crossed or [
+            f"its allele frequency is {_fmt_pct(af)}"]) + (f" (overall AF {_fmt_pct(af)})." if af is not None and
+                                                           not (af >= th.get("af", 1)) else "."))
+    elif cat == "ba1_frequency_non_benign":
+        reason = f"Classified \"{sig}\" but observed at {_fmt_pct(max(af or 0, ev.get('popmax_af') or 0))}, above the 5% BA1 level."
+    elif cat == "rare_benign":
+        reason = f"Classified \"{sig}\" while observed at only {_fmt_pct(af)}."
+    elif cat == "conflicting_interpretation":
+        reason = "Different ClinVar submitters have provided conflicting interpretations for this variant."
+    elif cat == "low_allele_number":
+        reason = (f"Allele number {ev.get('an', 0):,} is {ev.get('fraction', 0):.0%} of the gene's median "
+                  f"({ev.get('gene_median_an', 0):,.0f}).")
+    elif cat == "frequency_outlier_within_class":
+        reason = (f"Its frequency ({_fmt_pct(af)}) is {abs(ev.get('robust_z', 0)):.1f} robust standard deviations "
+                  f"from the typical {str(ev.get('class', '')).replace('_', '/')} variant in this gene.")
+    elif cat == "gnomad_qc_filter":
+        reason = f"Quality filters reported: {', '.join(ev.get('filters') or []) or 'see source'}."
+    else:
+        reason = f.get("explanation", "")
+    return {"headline": headline, "reason": reason, "why_it_matters": why, "recommendation": rec}
+
+
+def enrich(flags: list[dict], rows: list[dict]) -> list[dict]:
+    by_key = {r.get("vcf_key"): r for r in rows}
+    for f in flags:
+        f.update(describe_flag(f, by_key.get(f["variant_key"], {})))
+    return flags

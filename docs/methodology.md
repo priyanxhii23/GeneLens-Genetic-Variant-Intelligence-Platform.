@@ -7,8 +7,8 @@ DATA COLLECTION → DATA VALIDATION → DATA PREPROCESSING → VARIANT NORMALIZA
 → STATISTICAL ANALYSIS → ANOMALY SCREENING → DATA VISUALIZATION → RESEARCH INTERPRETATION → REPORT GENERATION
 ```
 
-## 1. Data collection (`services/`)
-gnomAD variants and constraint for one gene and dataset, plus ClinVar records for the same gene (E-utilities or bulk TSV). See [data_sources.md](data_sources.md). Provenance is stored for every dataset.
+## 1. Data collection (`services/`, `datasets.py`)
+Frequency or catalogue records for one gene from the selected dataset (gnomAD v2.1–v4/ExAC, 1000 Genomes phase 3, or dbSNP; none for the ClinVar-only dataset), ClinVar records for the same gene on the same assembly, gnomAD gene constraint, and a gene-annotation cross-check from Ensembl and UCSC. See [../DATA_SOURCES.md](../DATA_SOURCES.md). Provenance is stored for every dataset and source.
 
 ## 2. Data validation (`validation.py`)
 * `AF = AC / AN` is defined only when `AN > 0` and `0 ≤ AC ≤ AN`; otherwise it is `None`.
@@ -61,6 +61,12 @@ When several ClinVar records map to one allele, the primary is the one with most
 
 **Real-data validation (HBB, gnomAD v4 + ClinVar, 2026-11-10):** 868 gnomAD variants, 1,974 ClinVar records (1,833 with allele coordinates), 455 exact + 34 normalized matches (all 34 normalized matches are indels whose anchor bases differ between sources). The sickle-cell allele (rs334, `11-5227002-T-A`, Pathogenic) matched exactly, with AF 0.27 % overall and 4.9 % in the African/African-American group.
 
+### Dataset-specific notes
+* **1000 Genomes**: AC/AN from the VCF INFO field; super-population AN = 2 × samples, AC = round(AF × AN) (flagged).
+* **dbSNP**: AN derived from a study's allele count ÷ frequency (flagged); alleles without a study frequency keep AF empty and are not treated as data-quality defects.
+* **ClinVar-only**: no frequency rows; matching reports every record as ClinVar-only/unmatchable and frequency-based tests are reported as not applicable.
+* **GRCh37 datasets**: ClinVar records are expressed on GRCh37 using ClinVar's own GRCh37 locations before matching.
+
 ## 6. Statistical analysis (`statistics.py`)
 Sample: exact + normalized matches with gnomAD AF > 0 (ambiguous optional).
 
@@ -99,6 +105,9 @@ Default thresholds (all configurable in the UI / API):
 
 Every flag stores its evidence (values and thresholds) and a plain-language explanation. Explanations for biological-interest flags list possible explanations (recessive carriers, reduced penetrance, founder effects, balancing selection) and state explicitly that the flag does not mean a variant is misclassified.
 
+### Plain-language flag presentation
+Each flag also stores a **headline**, a **reason** sentence filled with the variant's own values (and naming exactly which threshold was crossed), a **why it matters** paragraph and a **recommended investigation** (`anomalies.CATEGORY_TEXT`, `describe_flag`). Raw evidence remains stored and is shown under *Technical evidence* in the variant details.
+
 ## 8. Visualisation
 The backend precomputes chart-ready summaries (histograms on fixed log10 AF bins, box data for matched variants, population matrices, review-star crosstabs), so the browser never loads full datasets.
 
@@ -112,6 +121,15 @@ Findings are generated from templates filled with computed values (counts, p-val
 
 ## Synthetic data (`synthetic.py`)
 See README §12. The anomaly engine is evaluated on every synthetic job: injected unusual-frequency records (half P/LP at AF 1–10 %, half B/LB at AF ≈ 3e-7–5e-6) and injected conflicts are known by construction, and GeneLens reports how many are recovered under default thresholds (for HBB-fitted data with seed 7, 90/100 unusual and 99/100 conflicts; the misses are records whose classification was later blanked by the missingness scenario).
+
+## Gene Comparison Lab (`comparison.py`)
+* Uses each gene's most recent completed analysis for the chosen dataset (REAL records only).
+* **Population selection**: AF recomputed as ΣAC ÷ ΣAN over the selected groups (missing AN excluded, never zero); grpmax recomputed among eligible selected groups.
+* **Minimum review stars**: ClinVar labels below the minimum are set aside as *below review threshold*.
+* **What-if**: re-runs the frequency rules (`frequent_pathogenic`, `ba1_frequency_non_benign`, `rare_benign`) with baseline and scenario thresholds and reports previous result, updated result, difference and percentage change per gene and in total. Tests confirm monotonic behaviour (raising the P/LP threshold never adds flags).
+
+## Real vs synthetic separation
+Statistics, populations, dashboard metrics and anomaly summaries are computed per provenance group; BOTH returns both groups side by side and charts distinguish them. Tests assert that synthetic generation never changes real statistics and that each mode returns only the requested records.
 
 ## Reproducibility
 * Every analysis stores its parameters, dataset releases and retrieval dates.

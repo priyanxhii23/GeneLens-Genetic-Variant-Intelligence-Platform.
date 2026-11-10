@@ -56,11 +56,15 @@ class SyntheticParams:
     conflicting_rate: float = 0.0
     unusual_rate: float = 0.0
     populations: list[str] = field(default_factory=lambda: list(DEFAULT_POPULATIONS))
+    duplicate_rate: float = 0.0          # share of records that repeat an earlier allele (dedup testing)
+    gene_label: str | None = None        # stored as "SYN:<label>" so it can never pass as a real gene
+    af_min: float | None = None          # optional allele-frequency range for generated values
+    af_max: float | None = None
 
     def validate(self):
         if not 1 <= self.n_records <= 100_000:
             raise ValueError("n_records must be between 1 and 100,000")
-        for name in ("missing_rate", "conflicting_rate", "unusual_rate"):
+        for name in ("missing_rate", "conflicting_rate", "unusual_rate", "duplicate_rate"):
             v = getattr(self, name)
             if not 0 <= v <= 0.5:
                 raise ValueError(f"{name} must be between 0 and 0.5")
@@ -71,6 +75,12 @@ class SyntheticParams:
                 raise ValueError("class_distribution weights must sum to > 0")
         if not self.populations:
             raise ValueError("at least one population is required")
+        for name in ("af_min", "af_max"):
+            v = getattr(self, name)
+            if v is not None and not 0 < v <= 1:
+                raise ValueError(f"{name} must be in (0, 1]")
+        if self.af_min is not None and self.af_max is not None and self.af_min >= self.af_max:
+            raise ValueError("af_min must be smaller than af_max")
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +196,9 @@ def generate(params: SyntheticParams, model: dict, job_id: str) -> list[dict]:
         else:           # very rare benign
             classes[i] = "B_LB"
             log_af[i] = rng.uniform(-6.5, -5.3)
-    log_af = np.clip(log_af, -7.0, -0.05)
+    lo = np.log10(params.af_min) if params.af_min else -7.0
+    hi = min(np.log10(params.af_max), -0.05) if params.af_max else -0.05
+    log_af = np.clip(log_af, lo, max(hi, lo))
 
     an_cfg = model["log10_an"]
     log_an = np.clip(rng.normal(an_cfg["mean"], an_cfg["sd"], n), an_cfg["min"], an_cfg["max"])
@@ -226,7 +238,8 @@ def generate(params: SyntheticParams, model: dict, job_id: str) -> list[dict]:
         if scenario[i] == "unusual":
             qc.append("simulated_unusual_frequency")
         rec = {
-            "provenance": "SYNTHETIC", "vcf_key": f"SYN-{job_id}-{i + 1:06d}", "gene_symbol": "SYNTHETIC",
+            "provenance": "SYNTHETIC", "vcf_key": f"SYN-{job_id}-{i + 1:06d}",
+            "gene_symbol": f"SYN:{params.gene_label}"[:32] if params.gene_label else "SYNTHETIC",
             "chrom": "SYN", "pos": i + 1, "ref": ref, "alt": alt, "variant_type": vtype,
             "in_gnomad": True, "in_clinvar": True, "ac": ac, "an": an, "af": ac / an if an else None,
             "populations": populations, "homozygote_count": 0,
@@ -256,6 +269,17 @@ def generate(params: SyntheticParams, model: dict, job_id: str) -> list[dict]:
             r.update(classification="not_provided", coarse_class="OTHER",
                      clinical_significance="Not provided (simulated)")
             r["qc_flags"].append("simulated_missing_classification")
+
+    # duplicates – a later record repeats the alleles/position of an earlier one (labelled ground truth)
+    n_dup = int(round(params.duplicate_rate * n))
+    if n_dup and n > 1:
+        targets = rng.choice(np.arange(1, n), size=min(n_dup, n - 1), replace=False)
+        originals = np.setdiff1d(np.arange(n), targets)  # a duplicate always copies a non-duplicated record
+        for t in targets:
+            src = records[int(rng.choice(originals))]
+            r = records[int(t)]
+            r.update(pos=src["pos"], ref=src["ref"], alt=src["alt"], variant_type=src["variant_type"])
+            r["qc_flags"] = r["qc_flags"] + ["simulated_duplicate", "duplicate_record"]
     return records
 
 

@@ -22,6 +22,7 @@ from pathlib import Path
 from app.config import get_settings
 from app.services.cache import DiskCache
 from app.services.http import ExternalServiceError, request_with_retry
+from app.sources.tracking import record_error, record_retrieval
 
 log = logging.getLogger(__name__)
 
@@ -114,9 +115,15 @@ class GnomadClient:
         hit = self.cache.get(key)
         if hit:
             return hit["payload"], {**hit["meta"], "access_mode": "cache"}
-        data = self._post(query, variables)
+        try:
+            data = self._post(query, variables)
+        except ExternalServiceError as exc:
+            record_error("gnomad", str(exc))
+            raise
         meta = {"retrieved_at": datetime.now(timezone.utc).isoformat(), "access_mode": "live_api"}
         self.cache.set(key, data, meta)
+        gene = data.get("gene") if isinstance(data, dict) else None
+        record_retrieval("gnomad", len((gene or {}).get("variants") or []) or 1)
         return data, meta
 
     # -- public API ------------------------------------------------------

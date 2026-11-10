@@ -1,14 +1,21 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import Plot from "../../components/Plot";
-import { ClassBadge, Explain, NeedsAnalysis, PageHeader, Panel, stagger } from "../../components/ui";
+import { ClassBadge, ErrorState, Metric, Guide, GuideItem, HelixLoader, Insight, NeedsAnalysis, PageHeader, Panel, ProvenanceBadge, stagger, Tabs, Term } from "../../components/ui";
+import { api } from "../../lib/api";
+import { useFetch } from "../../lib/analysis";
+import { useProvenance } from "../../lib/provenance";
 import { VariantDrawer } from "./VariantExplorer";
 import { useAnalysis } from "../../lib/analysis";
-import { CLASS_META, fmtAF, fmtInt, MAIN_CLASSES, pct, POP_LABELS, token } from "../../lib/format";
+import { CLASS_META, fmtAF, fmtDate, fmtInt, MAIN_CLASSES, pct, POP_LABELS, token } from "../../lib/format";
 
 export default function PopulationObservatory() {
   const { analysisId, detail } = useAnalysis();
-  const pops = detail?.results?.populations;
+  const { mode } = useProvenance();
+  const [grp, setGrp] = useState<"REAL" | "SYNTHETIC">("REAL");
+  const res = useFetch(analysisId && detail?.results ? () => api.populationsFor(analysisId, mode) : null, [analysisId, mode, detail?.results]);
+  const which = mode === "BOTH" ? grp : (mode as "REAL" | "SYNTHETIC");
+  const pops = res.data?.groups[which] ?? undefined;
   const [selected, setSelected] = useState<string[] | null>(null);
   const [classFilter, setClassFilter] = useState<string>("ALL");
   const [open, setOpen] = useState<number | null>(null);
@@ -40,14 +47,41 @@ export default function PopulationObservatory() {
   }, [pops, active]);
 
   if (!analysisId) return <NeedsAnalysis />;
-  if (!pops) return <Panel><p className="text-sm text-muted">Results not available yet.</p></Panel>;
+  if (res.loading && !res.data) return <HelixLoader label="Loading population data" />;
+  if (res.error) return <ErrorState message={res.error} onRetry={res.reload} />;
+  if (!pops) return <Insight tone="pink" label="Nothing to show" reason={which === "SYNTHETIC" ? "This analysis has no linked synthetic records yet." : "Population data is not available for this analysis."}><p>{which === "SYNTHETIC" ? "Generate a synthetic dataset in the Synthetic Lab first." : "The selected dataset may not report population-level counts (for example dbSNP or the ClinVar-only dataset)."}</p></Insight>;
+  const top = [...pops.groups].sort((a, b) => b.variants_observed - a.variants_observed)[0];
   const popmax = Object.entries(pops.pathogenic_popmax_distribution).sort((a, b) => b[1] - a[1]);
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
       <PageHeader index="04" title="Population Frequency Observatory"
-        subtitle={`Allele frequencies across gnomAD genetic-ancestry groups for ${fmtInt(pops.n_variants)} gnomAD variants. These are aggregate reference-sample frequencies – they cannot be used to infer anyone's ancestry or disease risk.`} />
+        subtitle={`Allele frequencies across genetic-ancestry groups for ${fmtInt(pops.n_variants)} ${which === "SYNTHETIC" ? "synthetic" : (detail?.results?.dataset?.frequency_source ?? "gnomAD")} records. These are aggregate reference-sample frequencies – they cannot be used to infer anyone's ancestry or disease risk.`}
+        actions={mode === "BOTH" ? <Tabs value={grp} onChange={setGrp} options={[{ value: "REAL", label: <><span className="h-2 w-2 rounded-full bg-gold" />Real</> }, { value: "SYNTHETIC", label: <><span className="h-2 w-2 rounded-full bg-pink" />Synthetic</> }]} /> : <ProvenanceBadge p={which} />} />
+      {pops.n_variants === 0 ? (
+        <Insight label="No population data" reason="The selected dataset does not report population-level allele counts.">
+          <p>Population breakdowns are available for <b>gnomAD</b> and <b>1000 Genomes</b> datasets. dbSNP and ClinVar-only analyses have no per-population counts.</p>
+        </Insight>
+      ) : top && (
+        <Insight label="Main observation" reason={`The ${top.label} group contributes the most observed variants (${fmtInt(top.variants_observed)}), which mainly reflects how many people from that group were sequenced.`}>
+          <p>Larger groups detect more rare variants simply because more chromosomes were examined (median <Term k="AN">allele number</Term> {top.median_an === null ? "not reported" : fmtInt(Math.round(top.median_an))} here). Compare frequencies, not variant counts, when asking whether an allele is more common in one group. Missing values are shown explicitly and are <b>not</b> zero.</p>
+        </Insight>
+      )}
 
+      {pops.overview && (() => {
+        const o = pops.overview; const hi = [...pops.groups].filter((g) => g.max_af != null).sort((a, b) => (b.max_af ?? 0) - (a.max_af ?? 0))[0];
+        const meta = which === "REAL" ? detail?.datasets?.find((d) => d.source !== "ClinVar" && d.source !== "gnomAD-constraint") : undefined;
+        return (<>
+          <div className="layout-metrics">
+            <Metric label="Variants with population data" value={o.variants_with_population_data} />
+            <Metric label="Population groups" value={pops.populations.length} tone="violet" />
+            <Metric label="Median overall AF" value={null} text={o.median_overall_af === null ? "n/a" : fmtAF(o.median_overall_af)} hint={`${fmtInt(o.variants_with_overall_af)} variants with an overall AF`} />
+            <Metric label="Highest population AF" value={null} text={hi ? fmtAF(hi.max_af) : "n/a"} hint={hi ? `in ${hi.label}` : "not available"} tone="warn" />
+            <Metric label="Missing some groups" value={o.variants_missing_some_population} tone="warn" hint="at least one group without data" />
+          </div>
+          {meta && <p className="meta">Source: {meta.source} · {meta.release ?? meta.dataset} · {meta.reference_genome} · retrieved {fmtDate(meta.retrieved_at)} ({meta.access_mode.replace(/_/g, " ")}) · max AN {fmtInt(o.max_an)}</p>}
+        </>);
+      })()}
       <Panel bodyClass="p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="eyebrow mr-2">populations</span>
@@ -65,7 +99,7 @@ export default function PopulationObservatory() {
         </div>
       </Panel>
 
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+      <div className="layout-split">
         <Panel eyebrow={`top ${rows.length} variants by overall AF`} title="Population frequency matrix">
           <Plot data={heat} height={Math.max(320, rows.length * 18 + 80)} layout={{ margin: { l: 190, r: 20, t: 8, b: 40 }, yaxis: { autorange: "reversed", tickfont: { size: 10, family: "JetBrains Mono" } }, xaxis: { side: "top" } }} />
           <p className="mt-2 text-xs text-faint">Empty (background) cells = population had no allele number at this site or AC = 0. Hover a cell for AC/AN.</p>
@@ -87,11 +121,12 @@ export default function PopulationObservatory() {
       <Panel eyebrow="interactive comparison" title="Group summary">
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full min-w-[720px]">
-            <thead><tr>{["Group", "Label", "Variants AC>0", "Total AC", "Median AN", "Missing AN", "grpmax eligible"].map((h) => <th key={h} className="table-head">{h}</th>)}</tr></thead>
+            <thead><tr>{["Group", "Label", "Variants AC>0", "Total AC", "Median AN", "Highest AF in group", "Missing AN", "grpmax eligible"].map((h) => <th key={h} className="table-head">{h}</th>)}</tr></thead>
             <tbody>{pops.groups.filter((g) => active.includes(g.id)).map((g) => (
               <tr key={g.id}><td className="table-cell font-mono text-xs">{g.id}</td><td className="table-cell text-sm">{g.label}</td>
                 <td className="table-cell data">{fmtInt(g.variants_observed)}</td><td className="table-cell data">{fmtInt(g.total_ac)}</td>
-                <td className="table-cell data">{fmtInt(Math.round(g.median_an))}</td>
+                <td className="table-cell data">{g.median_an === null ? "—" : fmtInt(Math.round(g.median_an))}</td>
+                <td className="table-cell text-[13px]">{g.max_af === undefined || g.max_af === null ? <span className="text-faint">—</span> : <button className="text-left hover:text-accent" onClick={() => g.max_af_id && setOpen(g.max_af_id)}><span className="data">{fmtAF(g.max_af)}</span><span className="block max-w-[180px] truncate font-mono text-[11px] text-muted">{g.max_af_variant}</span></button>}</td>
                 <td className="table-cell"><span className={`chip ${g.missing ? "border-warn/40 text-warn" : "border-line text-muted"}`}>{fmtInt(g.missing)} · {pct(g.missing_fraction)}</span></td>
                 <td className="table-cell text-xs text-muted">{g.grpmax_eligible ? "yes" : "no"}</td></tr>))}</tbody>
           </table>
@@ -112,7 +147,14 @@ export default function PopulationObservatory() {
           </table>
         </div>
       </Panel>
-      <Explain>{pops.notes.map((n) => <p key={n}>{n}</p>)}</Explain>
+      <Guide>
+        <GuideItem term="Population groups">These represent <b>genetic ancestry groups</b> used in the reference dataset (for example <b>afr</b> = African / African American, <b>nfe</b> = non-Finnish European). They describe groups of sampled individuals, <b>not</b> an individual's identity.</GuideItem>
+        <GuideItem term={<Term k="AF">Allele frequency (AF)</Term>}>How frequently an alternate allele occurs in a sampled group. It is calculated as <b>AF = AC ÷ AN</b> – the number of chromosomes carrying the allele divided by the number examined. Example: AC = 5 out of AN = 50,000 gives AF = 0.0001 (1 in 10,000).</GuideItem>
+        <GuideItem term={<><Term k="AC">AC</Term> and <Term k="AN">AN</Term></>}><b>AC</b> (allele count) counts carriers' chromosomes; <b>AN</b> (allele number) counts all chromosomes successfully genotyped – about two per person. An extremely small AF such as <b>1e-6</b> usually means the allele was seen once or twice among a million chromosomes.</GuideItem>
+        <GuideItem term="Missing (n/a)">If a population has no reported allele number for a variant, its frequency is <b>unavailable</b>. This does <b>NOT</b> mean the allele frequency is zero – the site may not have been covered in that group.</GuideItem>
+        <GuideItem term={<Term k="grpmax">grpmax</Term>}>The highest frequency among large, non-bottlenecked groups. Small or founder groups (Amish, Ashkenazi Jewish, Finnish, Middle Eastern, "remaining") are excluded because chance and population history can inflate their frequencies.</GuideItem>
+        <GuideItem term="Important">Population-level genetic frequencies <b>cannot</b> be used to determine an individual's ancestry or predict their disease risk. They describe reference samples only.</GuideItem>
+      </Guide>
       <VariantDrawer id={open} onClose={() => setOpen(null)} />
     </motion.div>
   );

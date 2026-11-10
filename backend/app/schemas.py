@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.services.gnomad_client import DATASET_GENOME
+from app.datasets import BY_ID as DATASET_BY_ID
 
 
 class AnomalyThresholdsIn(BaseModel):
@@ -40,8 +40,8 @@ class AnalysisRunRequest(BaseModel):
     @field_validator("dataset")
     @classmethod
     def _dataset(cls, v: str) -> str:
-        if v not in DATASET_GENOME:
-            raise ValueError(f"dataset must be one of {sorted(DATASET_GENOME)}")
+        if v not in DATASET_BY_ID:
+            raise ValueError(f"dataset must be one of {sorted(DATASET_BY_ID)}")
         return v
 
 
@@ -91,13 +91,17 @@ class SyntheticRequest(BaseModel):
     missing_rate: float = Field(0.0, ge=0, le=0.5)
     conflicting_rate: float = Field(0.0, ge=0, le=0.5)
     unusual_rate: float = Field(0.0, ge=0, le=0.5)
+    duplicate_rate: float = Field(0.0, ge=0, le=0.5)
+    gene_label: str | None = Field(None, max_length=20, pattern=r"^[A-Za-z0-9\-_.]*$")
+    af_min: float | None = Field(None, gt=0, le=1)
+    af_max: float | None = Field(None, gt=0, le=1)
     populations: list[str] = Field(default_factory=lambda: ["afr", "amr", "asj", "eas", "fin", "mid", "nfe",
                                                             "sas", "remaining"])
 
 
 class ReportRequest(BaseModel):
     analysis_id: str
-    format: Literal["pdf", "csv"] = "pdf"
+    format: Literal["pdf", "csv", "json"] = "pdf"
 
 
 class ExportOut(BaseModel):

@@ -1,22 +1,42 @@
 {
+  // Run and Debug panel (Ctrl+Shift+D) → pick a configuration → F5
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "GeneLens API (uvicorn)",
+      "name": "GeneLens API (debug)",
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
       "args": ["app.main:app", "--reload", "--port", "8000"],
       "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "windows": { "python": "${workspaceFolder}\\backend\\.venv\\Scripts\\python.exe" },
       "justMyCode": true
     },
     {
-      "name": "Run pipeline for HBB (CLI)",
+      "name": "Run pipeline for HBB (CLI, debug)",
       "type": "debugpy",
       "request": "launch",
       "module": "scripts.run_pipeline",
       "args": ["--gene", "HBB"],
-      "cwd": "${workspaceFolder}/backend"
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "windows": { "python": "${workspaceFolder}\\backend\\.venv\\Scripts\\python.exe" }
+    },
+    {
+      "name": "Open GeneLens in Chrome/Edge",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "preLaunchTask": "Frontend: start dev server"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "GeneLens: full stack (debug API + browser)",
+      "configurations": ["GeneLens API (debug)", "Open GeneLens in Chrome/Edge"],
+      "stopAll": true
     }
   ]
 }

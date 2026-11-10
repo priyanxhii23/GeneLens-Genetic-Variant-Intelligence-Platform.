@@ -17,28 +17,33 @@ def population_summary(rows: list[dict], top_n: int = 40) -> dict:
     variants = [r for r in rows if r.get("in_gnomad") and r.get("populations")]
     pop_ids = sorted({p["id"] for r in variants for p in r["populations"]})
     agg = {pid: {"id": pid, "label": POPULATION_LABELS.get(pid, pid), "grpmax_eligible": pid not in GRPMAX_EXCLUDED,
-                 "variants_observed": 0, "total_ac": 0, "an_values": [], "missing": 0,
+                 "variants_observed": 0, "total_ac": 0, "an_values": [], "missing": 0, "max_af": None, "max_af_variant": None, "max_af_id": None,
                  "by_class": defaultdict(lambda: {"observed": 0, "total_ac": 0})} for pid in pop_ids}
     for r in variants:
         seen = {p["id"]: p for p in r["populations"]}
         for pid in pop_ids:
             p = seen.get(pid)
-            if not p or not p.get("an"):
+            if not p or (not p.get("an") and p.get("af") is None):
                 agg[pid]["missing"] += 1
                 continue
             a = agg[pid]
-            a["an_values"].append(p["an"])
-            if p["ac"] > 0:
+            if p.get("an"):
+                a["an_values"].append(p["an"])
+            if p.get("af") is not None and (a["max_af"] is None or p["af"] > a["max_af"]):
+                a["max_af"], a["max_af_variant"], a["max_af_id"] = p["af"], r.get("hgvsp") or r.get("vcf_key"), r.get("id")
+            # uploaded datasets may report a population AF without AC/AN; AC is then left out of totals
+            observed = p["ac"] > 0 if p.get("ac") is not None else (p.get("af") or 0) > 0
+            if observed:
                 a["variants_observed"] += 1
-                a["total_ac"] += p["ac"]
+                a["total_ac"] += p.get("ac") or 0
                 bc = a["by_class"][r.get("coarse_class", "NOT_IN_CLINVAR")]
                 bc["observed"] += 1
-                bc["total_ac"] += p["ac"]
+                bc["total_ac"] += p.get("ac") or 0
     groups = []
     for pid, a in agg.items():
-        an = np.array(a.pop("an_values") or [0])
-        groups.append({**a, "by_class": dict(a["by_class"]), "median_an": float(np.median(an)),
-                       "mean_an": float(an.mean()), "missing_fraction": a["missing"] / len(variants) if variants else None})
+        an = np.array(a.pop("an_values"))
+        groups.append({**a, "by_class": dict(a["by_class"]), "median_an": float(np.median(an)) if an.size else None,
+                       "mean_an": float(an.mean()) if an.size else None, "missing_fraction": a["missing"] / len(variants) if variants else None})
 
     # per-variant matrix for the most frequent annotated variants
     ranked = sorted((r for r in variants if r.get("af")), key=lambda r: r["af"], reverse=True)[:top_n]
@@ -50,14 +55,24 @@ def population_summary(rows: list[dict], top_n: int = 40) -> dict:
             "coarse_class": r.get("coarse_class"), "clinical_significance": r.get("clinical_significance"),
             "af": r["af"], "provenance": r.get("provenance", "REAL"),
             "populations": {pid: {"af": pops[pid].get("af"), "ac": pops[pid].get("ac"), "an": pops[pid].get("an")}
-                            if pid in pops and pops[pid].get("an") else None for pid in pop_ids},
+                            if pid in pops and (pops[pid].get("an") or pops[pid].get("af") is not None) else None for pid in pop_ids},
         })
     # distribution of popmax population among P/LP variants
     popmax_counts: dict[str, int] = defaultdict(int)
     for r in variants:
         if r.get("coarse_class") == "P_LP" and r.get("popmax_population"):
             popmax_counts[r["popmax_population"]] += 1
+    with_af = [r["af"] for r in variants if r.get("af") is not None]
     return {
+        "overview": {
+            "variants_with_population_data": len(variants),
+            "variants_with_overall_af": len(with_af),
+            "median_overall_af": float(np.median(with_af)) if with_af else None,
+            "total_ac": int(sum(r.get("ac") or 0 for r in variants)),
+            "max_an": int(max((r.get("an") or 0) for r in variants)) if variants else None,
+            "variants_missing_some_population": sum(1 for r in variants
+                                                    if len([p for p in r["populations"] if p.get("an") or p.get("af") is not None]) < len(pop_ids)),
+        },
         "populations": pop_ids, "groups": groups, "matrix": matrix, "n_variants": len(variants),
         "pathogenic_popmax_distribution": dict(popmax_counts),
         "notes": [

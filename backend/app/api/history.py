@@ -48,3 +48,5 @@ def delete_analysis(analysis_id: str, db: Session = Depends(get_db)):
     a = get_analysis_or_404(db, analysis_id)
     db.delete(a)
     db.commit()
+    from app.pipeline import rowcache
+    rowcache.invalidate()

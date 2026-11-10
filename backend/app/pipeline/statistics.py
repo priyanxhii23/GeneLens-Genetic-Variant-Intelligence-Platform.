@@ -239,7 +239,8 @@ def analysis_frame(rows: list[dict]) -> pd.DataFrame:
 
 def run_statistics(rows: list[dict], include_ambiguous: bool = False, seed: int = 0) -> dict:
     df = analysis_frame(rows)
-    allowed = {"exact", "normalized"} | ({"ambiguous"} if include_ambiguous else set())
+    # "synthetic"/"custom" rows arrive already paired (frequency + label); real rows never carry that status
+    allowed = {"exact", "normalized", "synthetic", "custom"} | ({"ambiguous"} if include_ambiguous else set())
     matched = df[df["match_status"].isin(allowed) & df["in_gnomad"].astype(bool)]
     with_af = matched[matched["af"].notna() & (matched["af"] > 0)]
 

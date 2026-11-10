@@ -1,8 +1,9 @@
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
-import { ArrowRight, CircleDot, Dna, FlaskConical, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, CircleDot, FlaskConical, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import DnaHelix from "../components/DnaHelix";
+import { LogoMark } from "../components/ui";
 import { NAV } from "../components/Sidebar";
 import { ThemeToggle } from "../components/Workspace";
 import { api } from "../lib/api";
@@ -21,7 +22,8 @@ const MODULE_COPY: Record<string, string> = {
   "Statistics Studio": "Mann–Whitney, chi-square, Fisher, Spearman – assumptions checked, FDR-corrected, explained.",
   "Synthetic Lab": "Seeded generator fitted to real distributions. Every simulated record is permanently labelled.",
   "Report Generator": "PDF and CSV research reports with methodology, charts, limitations and citations.",
-  "History & Provenance": "Every analysis, dataset release, retrieval date, parameter and export – reopenable.",
+  "Gene Comparison Lab": "Compare 2–5 genes, re-filter by population, class and review status, and run what-if screening scenarios.",
+  "Source Manager": "Seven live connectors – gnomAD, ClinVar (API + bulk), Ensembl, dbSNP, IGSR/1000 Genomes, UCSC – with honest status.",
 };
 
 function Schematic({ index }: { index: number }) {
@@ -67,7 +69,7 @@ export default function Landing() {
   return (
     <div className="relative overflow-x-hidden">
       <nav className="fixed inset-x-0 top-0 z-30 flex items-center justify-between px-5 py-4 md:px-10">
-        <div className="flex items-center gap-2 font-display text-lg"><Dna size={18} className="text-accent" />GeneLens</div>
+        <div className="flex items-center gap-3 font-display text-[26px]"><LogoMark size={44} />GeneLens</div>
         <div className="flex items-center gap-2"><ThemeToggle /><Link to="/workspace" className="btn-ghost hidden sm:inline-flex">Workspace</Link></div>
       </nav>
 
@@ -87,8 +89,9 @@ export default function Landing() {
             with every statistic computed, every flag explained, and every simulated record labelled.
           </motion.p>
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.05 }} className="mt-9 flex flex-wrap items-center gap-3">
-            <Link to="/workspace" className="btn-primary group !px-6 !py-3 text-base">
-              Enter Research Workspace <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+            <Link to="/workspace" className="btn-primary group relative overflow-hidden !px-7 !py-3.5 text-[16px] shadow-glow">
+              <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover:translate-x-full" aria-hidden />
+              <span className="relative">Enter Research Workspace</span> <ArrowRight size={18} className="relative transition-transform group-hover:translate-x-1" />
             </Link>
             <div className="flex flex-wrap gap-2 text-xs">
               {statusErr && <span className="chip border-warn/40 text-warn">backend offline – start the API to connect</span>}
@@ -119,7 +122,7 @@ export default function Landing() {
 
       {/* MODULE PREVIEWS */}
       <section className="mx-auto max-w-6xl px-5 pb-24 md:px-10">
-        <div className="eyebrow mb-3">Ten research modules</div>
+        <div className="eyebrow mb-3">Eleven research modules · ten datasets · seven integrated sources</div>
         <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
           <ul className="space-y-1">
             {mods.map((m, i) => (

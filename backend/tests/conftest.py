@@ -6,6 +6,7 @@ import tempfile
 
 _TMP = tempfile.mkdtemp(prefix="genelens_test_")
 os.environ["GENELENS_DATA_DIR"] = _TMP
+os.environ["GENELENS_ENVIRONMENT"] = "test"  # no background network warm-up during tests
 
 import pytest  # noqa: E402
 
@@ -33,6 +34,8 @@ def fake_clients(monkeypatch):
 
     monkeypatch.setattr(runner, "GnomadClient", FakeGnomad)
     monkeypatch.setattr(runner, "ClinVarClient", FakeClinVar)
+    # gene annotation calls Ensembl/UCSC; tests must stay offline
+    monkeypatch.setattr(runner, "_annotate_gene", lambda *a, **k: {"sources": {}, "test_fixture": True})
     return FakeGnomad(), FakeClinVar()
 
 
