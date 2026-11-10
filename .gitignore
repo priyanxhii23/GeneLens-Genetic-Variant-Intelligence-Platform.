@@ -29,3 +29,6 @@ backend/data/snapshots/*
 .DS_Store
 Thumbs.db
 .idea/
+
+# Packaged project archive (generated with git archive; delivered separately)
+GeneLens_Complete_Project.zip
