@@ -1,5 +1,5 @@
 import { AnimatePresence, animate, motion, useInView, useMotionValue, useReducedMotion, useTransform } from "framer-motion";
-import { AlertTriangle, BookOpen, ChevronDown, FlaskConical, Lightbulb, ShieldCheck, Star } from "lucide-react";
+import { AlertTriangle, BookOpen, ChevronDown, FlaskConical, Lightbulb, ShieldCheck, Star, Upload } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { CLASS_META, MATCH_LABELS } from "../lib/format";
@@ -111,6 +111,11 @@ export function ClassBadge({ cls, label }: { cls: CoarseClass | string | null | 
 }
 
 export function ProvenanceBadge({ p, source }: { p: Provenance; source?: string | null }) {
+  if (p === "CUSTOM") return (
+    <span className="chip border-violet/50 bg-violet/10 text-violet" title="Record from a dataset you uploaded – kept separate from official data">
+      <Upload size={11} />CUSTOM DATA
+    </span>
+  );
   return p === "SYNTHETIC" ? (
     <span className="chip border-pink/50 bg-pink/10 text-pink" title="Simulated record – not a real observation">
       <FlaskConical size={11} />SYNTHETIC

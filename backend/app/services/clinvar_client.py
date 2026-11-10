@@ -262,7 +262,7 @@ class ClinVarClient:
     def tsv_path(self) -> Path:
         return self.settings.raw_dir / "variant_summary.txt.gz"
 
-    def download_tsv(self, force: bool = False, progress=None) -> Path:
+    def download_tsv(self, force: bool = False, progress=None, byte_progress=None) -> Path:
         """Stream the official variant_summary.txt.gz to the raw data directory."""
         import httpx
 
@@ -281,6 +281,8 @@ class ClinVarClient:
                     done += len(chunk)
                     if progress and total:
                         progress(done / total)
+                    if byte_progress:
+                        byte_progress(done, total or None)
         tmp.replace(path)
         return path
 

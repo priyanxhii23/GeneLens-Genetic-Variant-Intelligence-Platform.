@@ -31,7 +31,7 @@ export default function Reports() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-6">
-      <PageHeader index="09" title="Research Report Generator" subtitle={`Generate downloadable reports for ${detail?.analysis.gene_symbol ?? "the active analysis"}. Every sentence in the interpretation is derived from a computed value – no invented conclusions.`} />
+      <PageHeader index="10" title="Research Report Generator" subtitle={`Generate downloadable reports for ${detail?.analysis.gene_symbol ?? "the active analysis"}. Every sentence in the interpretation is derived from a computed value – no invented conclusions.`} />
       {!analysisId && <Insight label="No analysis selected" reason="Select or reopen an analysis below to generate its report."><p>Reports are built from a completed analysis. The history below lists every analysis stored in this installation.</p></Insight>}
       {analysisId && <div className="layout-split">
         <div className="space-y-4">

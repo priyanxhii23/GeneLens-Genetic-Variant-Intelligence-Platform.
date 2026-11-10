@@ -103,7 +103,8 @@ class ClinVarTsvSource(SourceAdapter):
                else "not downloaded yet – run python -m scripts.download_clinvar")
         return {"detail": f"variant_summary.txt.gz reachable ({size:.0f} MB); {loc}",
                 "release": f"variant_summary.txt.gz, modified {r.headers.get('Last-Modified', '?')}",
-                "local_file": local.exists()}
+                "local_file": local.exists(), "remote_size_mb": round(size, 1),
+                "remote_file_available": r.status_code == 200}
 
 
 class EnsemblSource(SourceAdapter):

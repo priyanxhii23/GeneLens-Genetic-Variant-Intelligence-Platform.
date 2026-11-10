@@ -59,7 +59,7 @@ export interface Thresholds {
   pathogenic_af: number; pathogenic_popmax_af: number; ba1_af: number; rare_benign_af: number;
   low_an_fraction: number; mad_z: number; use_isolation_forest: boolean; isolation_contamination: number; seed: number;
 }
-export interface PopulationGroup { id: string; label: string; grpmax_eligible: boolean; variants_observed: number; total_ac: number; median_an: number; mean_an: number; missing: number; missing_fraction: number | null; by_class: Record<string, { observed: number; total_ac: number }> }
+export interface PopulationGroup { id: string; label: string; grpmax_eligible: boolean; variants_observed: number; total_ac: number; median_an: number | null; mean_an: number | null; missing: number; missing_fraction: number | null; by_class: Record<string, { observed: number; total_ac: number }> }
 export interface PopulationSummary {
   populations: string[]; groups: PopulationGroup[]; n_variants: number; notes: string[];
   matrix: { variant_key: string; id: number; hgvsp: string | null; hgvsc: string | null; coarse_class: CoarseClass; clinical_significance: string | null; af: number; provenance: Provenance; populations: Record<string, { af: number | null; ac: number; an: number } | null> }[];
@@ -124,6 +124,12 @@ export interface SourceEntry {
   provides: string[]; used_for: string; homepage: string; available: boolean | null; detail: string | null;
   release: string | null; latency_ms: number | null; last_checked_at: string | null; last_success_at: string | null;
   last_retrieval_at: string | null; records_retrieved: number; last_error: string | null; last_error_at: string | null;
+  pipeline?: TsvPipeline;
+}
+export interface TsvPipeline {
+  source_reachable: boolean | null; remote_file_available: boolean | null; remote_size_mb: number | null; downloaded: boolean;
+  local_size_mb: number | null; indexed_gene_extracts: number; indexed_genes: string[]; records_imported: number;
+  download: { state: "idle" | "running" | "completed" | "failed"; bytes: number; total: number | null; error: string | null };
 }
 export interface GeneSuggestion {
   symbol: string; name: string | null; chrom: string | null; description: string | null; starter: boolean;
@@ -163,3 +169,35 @@ export interface WhatIfResult {
 }
 export interface SavedComparison { id: string; name: string; genes: string[]; dataset: string; parameters: CompareParams; created_at: string;
   results?: { run: { genes: CompareGene[] } | null; whatif: WhatIfResult | null } }
+
+// ---------------------------------------------------------------- Custom Dataset Lab
+export type CustomStatus = "inspected" | "queued" | "processing" | "completed" | "failed";
+export type Assembly = "GRCh37" | "GRCh38" | "unknown";
+export interface CustomInspection {
+  columns: string[]; row_count: number; preview: Record<string, string | number | null>[];
+  suggested_mapping: Record<string, string | null>; field_labels: Record<string, string>;
+  population_columns: Record<string, Partial<Record<"af" | "ac" | "an", string>>>;
+  missing_by_column: Record<string, number>;
+  assembly: { value: Assembly; source: string | null; evidence: string[]; note?: string }; issues: string[];
+}
+export interface CustomFlag { variant_id: number | null; variant_key: string; category: string; kind: string; priority: "high" | "medium" | "low"; headline: string; reason: string; why_it_matters: string; recommendation: string }
+export interface CustomSummary {
+  totals: { rows: number; valid: number; invalid: number; duplicates: number; unique_valid: number; records_with_missing_fields: number };
+  missing_by_field: Record<string, number>; invalid_values: Record<string, number>; field_status: Record<string, string>;
+  classification_distribution: Record<string, number>; variant_types: Record<string, number>; genes: Record<string, number>;
+  af_distribution: { edges: number[]; counts: number[]; with_af: number; af_zero: number; af_missing: number };
+  statistics: Statistics; populations: PopulationSummary | null;
+  clinvar: { status: string; reason?: string; mode?: string; note?: string; genes_queried?: string[]; clinvar_records_retrieved?: number;
+    matched_exact?: number; matched_normalized?: number; ambiguous?: number; no_clinvar_record?: number; errors?: { gene: string; message: string }[];
+    concordance?: { compared: number; agree: number; disagree: number; agreement_rate: number | null; pairs: Record<string, number> } };
+  quality: { qc_flag_counts: Record<string, number>; records_with_flags: number };
+  anomaly_summary: AnomalySummary; anomalies: CustomFlag[]; runtime_seconds: number;
+}
+export interface CustomDataset {
+  id: string; name: string; filename: string; file_format: string; size_bytes: number; assembly: Assembly;
+  assembly_source: string | null; status: CustomStatus; stage: string | null; progress: number; error: string | null;
+  created_at: string; updated_at: string; provenance: "CUSTOM"; row_count: number | null; has_cleaned: boolean;
+  totals?: CustomSummary["totals"];
+  inspection?: CustomInspection; mapping?: Record<string, string | null>; options?: { clinvar?: boolean };
+  summary?: CustomSummary | null; history?: { at: string; action: string; detail: string | null }[];
+}

@@ -64,7 +64,7 @@ export default function PopulationObservatory() {
         </Insight>
       ) : top && (
         <Insight label="Main observation" reason={`The ${top.label} group contributes the most observed variants (${fmtInt(top.variants_observed)}), which mainly reflects how many people from that group were sequenced.`}>
-          <p>Larger groups detect more rare variants simply because more chromosomes were examined (median <Term k="AN">allele number</Term> {fmtInt(Math.round(top.median_an))} here). Compare frequencies, not variant counts, when asking whether an allele is more common in one group. Missing values are shown explicitly and are <b>not</b> zero.</p>
+          <p>Larger groups detect more rare variants simply because more chromosomes were examined (median <Term k="AN">allele number</Term> {top.median_an === null ? "not reported" : fmtInt(Math.round(top.median_an))} here). Compare frequencies, not variant counts, when asking whether an allele is more common in one group. Missing values are shown explicitly and are <b>not</b> zero.</p>
         </Insight>
       )}
 
@@ -111,7 +111,7 @@ export default function PopulationObservatory() {
             <tbody>{pops.groups.filter((g) => active.includes(g.id)).map((g) => (
               <tr key={g.id}><td className="table-cell font-mono text-xs">{g.id}</td><td className="table-cell text-sm">{g.label}</td>
                 <td className="table-cell data">{fmtInt(g.variants_observed)}</td><td className="table-cell data">{fmtInt(g.total_ac)}</td>
-                <td className="table-cell data">{fmtInt(Math.round(g.median_an))}</td>
+                <td className="table-cell data">{g.median_an === null ? "—" : fmtInt(Math.round(g.median_an))}</td>
                 <td className="table-cell"><span className={`chip ${g.missing ? "border-warn/40 text-warn" : "border-line text-muted"}`}>{fmtInt(g.missing)} · {pct(g.missing_fraction)}</span></td>
                 <td className="table-cell text-xs text-muted">{g.grpmax_eligible ? "yes" : "no"}</td></tr>))}</tbody>
           </table>

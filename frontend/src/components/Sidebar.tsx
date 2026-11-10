@@ -6,7 +6,7 @@
 import { motion } from "framer-motion";
 import {
   Activity, BarChart3, ChevronsLeft, ChevronsRight, Database, FileText, FlaskConical, Gauge, GitCompareArrows, Globe2,
-  Layers, Radar, ShieldAlert, X,
+  Layers, Radar, ShieldAlert, Upload, X,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAnalysis } from "../lib/analysis";
@@ -24,6 +24,7 @@ export const NAV = [
   { to: "/workspace/compare", label: "Gene Comparison Lab", band: "q23", icon: GitCompareArrows },
   { to: "/workspace/reports", label: "Report Generator", band: "q24", icon: FileText },
   { to: "/workspace/sources", label: "Source Manager", band: "q25", icon: Database },
+  { to: "/workspace/custom", label: "Custom Dataset Lab", band: "q26", icon: Upload },
 ];
 
 export default function Sidebar({ open, onClose, collapsed, onToggle }: {

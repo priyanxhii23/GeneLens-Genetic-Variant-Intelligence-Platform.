@@ -21,6 +21,7 @@ const SyntheticLab = lazy(() => import("./pages/workspace/SyntheticLab"));
 const Reports = lazy(() => import("./pages/workspace/Reports"));
 const GeneComparisonLab = lazy(() => import("./pages/workspace/GeneComparisonLab"));
 const SourceManager = lazy(() => import("./pages/workspace/SourceManager"));
+const CustomDatasetLab = lazy(() => import("./pages/workspace/CustomDatasetLab"));
 
 const S = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="py-20"><HelixLoader label="Loading module" /></div>}>{children}</Suspense>
@@ -46,6 +47,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="reports" element={<S><Reports /></S>} />
               <Route path="compare" element={<S><GeneComparisonLab /></S>} />
               <Route path="sources" element={<S><SourceManager /></S>} />
+              <Route path="custom" element={<S><CustomDatasetLab /></S>} />
               {/* History & Provenance now lives inside the Report Generator */}
               <Route path="history" element={<Navigate to="/workspace/reports" replace />} />
             </Route>

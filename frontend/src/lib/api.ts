@@ -3,7 +3,7 @@ import type {
   AnalysisDetail, AnalysisSummary, Constraint, Dashboard, ExportRecord, Page, PopulationSummary, SourceStatus,
   Statistics, SyntheticJob, Thresholds, VariantDetail, VariantRow, AnomalySummary,
   Annotation, CompareGene, CompareParams, DatasetEntry, FlagItem, GeneSuggestion, Groups, ProvMode,
-  SavedComparison, SourceEntry, WhatIfResult, WhatIfThresholds,
+  SavedComparison, SourceEntry, WhatIfResult, WhatIfThresholds, CustomDataset, TsvPipeline,
 } from "./types";
 
 export class ApiError extends Error {
@@ -33,7 +33,7 @@ export function qs(params: Query = {}): string {
 const inflight = new Map<string, Promise<unknown>>();
 const cache = new Map<string, { at: number; data: unknown }>();
 const ttlFor = (path: string) =>
-  /^\/(datasets|sources)/.test(path) ? 60_000 : /status|\/custom-datasets/.test(path) ? 0 : 20_000;
+  /status|pipeline|\/custom-datasets/.test(path) ? 0 : /^\/(datasets|sources)/.test(path) ? 60_000 : 20_000;
 export function clearApiCache() { cache.clear(); }
 
 async function rawRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -73,11 +73,41 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 const post = <T>(path: string, body: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body) });
 
+/** Multipart upload with real byte-level progress (XMLHttpRequest exposes upload progress; fetch does not). */
+export function uploadCustomDataset(file: File, name: string | undefined, onProgress: (loaded: number, total: number) => void): Promise<CustomDataset> {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (name) fd.append("name", name);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/custom-datasets");
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+    xhr.onerror = () => reject(new ApiError("Cannot reach the GeneLens backend. Is it running on port 8000?", 0));
+    xhr.onload = () => {
+      let body: { detail?: unknown } | null = null;
+      try { body = JSON.parse(xhr.responseText); } catch { /* non-JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300) { clearApiCache(); resolve(body as unknown as CustomDataset); }
+      else reject(new ApiError(typeof body?.detail === "string" ? body.detail : `Upload failed (${xhr.status}).`, xhr.status));
+    };
+    xhr.send(fd);
+  });
+}
+
 export const api = {
+  customDatasets: () => request<CustomDataset[]>("/custom-datasets"),
+  customDataset: (id: string) => request<CustomDataset>(`/custom-datasets/${id}`),
+  updateCustomDataset: (id: string, body: { name?: string; assembly?: string; mapping?: Record<string, string | null>; clinvar?: boolean }) =>
+    request<CustomDataset>(`/custom-datasets/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  processCustomDataset: (id: string) => request<CustomDataset>(`/custom-datasets/${id}/process`, { method: "POST" }),
+  deleteCustomDataset: (id: string) => request<void>(`/custom-datasets/${id}`, { method: "DELETE" }),
+  customExportUrl: (id: string, format: "json" | "csv") => `/api/custom-datasets/${id}/export?format=${format}`,
+  customCleanedUrl: (id: string) => `/api/custom-datasets/${id}/cleaned.csv`,
   health: () => request<{ status: string; analyses: number }>("/health"),
   sources: (refresh = false) => request<SourceStatus>(`/sources/status${qs({ refresh: refresh || undefined })}`),
   datasets: (refresh = false) => request<DatasetEntry[]>(`/datasets${qs({ refresh: refresh || undefined })}`),
   sourceList: (refresh = false) => request<SourceEntry[]>(`/sources${qs({ refresh: refresh || undefined })}`),
+  tsvPipeline: () => request<TsvPipeline>("/sources/clinvar_tsv/pipeline"),
+  downloadTsv: () => request<TsvPipeline["download"]>("/sources/clinvar_tsv/download", { method: "POST" }),
   refreshSource: (id: string) => request<SourceEntry>(`/sources/${id}/refresh`, { method: "POST" }),
   suggestGenes: (q: string, live = true) => request<{ query: string; results: GeneSuggestion[]; live_search: string | null }>(`/genes/suggest${qs({ q, live: live ? undefined : false })}`),
   annotation: (id: number) => request<Annotation>(`/variants/${id}/annotation`),

@@ -1,7 +1,7 @@
 """Health, data sources, dataset registry, gene search/suggestions and variant annotation."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -38,7 +38,69 @@ def _source_row(src, db: Session, probe: dict | None = None) -> dict:
         "last_retrieval_at": st.last_retrieval_at if st else None,
         "records_retrieved": st.records_retrieved if st else 0,
         "last_error": st.last_error if st else None, "last_error_at": st.last_error_at if st else None,
+        **({"pipeline": clinvar_tsv_pipeline(probe, st)} if src.id == "clinvar_tsv" else {}),
     }
+
+
+# ---- ClinVar bulk TSV: honest per-stage status + optional background download ------------------
+_TSV_DOWNLOAD: dict = {"state": "idle", "bytes": 0, "total": None, "error": None, "started_at": None}
+
+
+def clinvar_tsv_pipeline(probe: dict | None, st) -> dict:
+    """Separate 'reachable', 'remote file available', 'downloaded', 'indexed' and 'records imported'."""
+    from app.services.clinvar_client import ClinVarClient
+
+    settings = get_settings()
+    local = ClinVarClient().tsv_path
+    extracts = sorted(settings.processed_dir.glob("clinvar_*_GRCh3*_*.csv.gz"))
+    probe = probe or {}
+    return {
+        "source_reachable": probe.get("available"),
+        "remote_file_available": probe.get("remote_file_available") if probe.get("available") else None,
+        "remote_size_mb": probe.get("remote_size_mb"),
+        "downloaded": local.exists(),
+        "local_size_mb": round(local.stat().st_size / 1e6, 1) if local.exists() else None,
+        "indexed_gene_extracts": len(extracts),
+        "indexed_genes": sorted({p.name.split("_")[1] for p in extracts})[:50],
+        "records_imported": (st.records_retrieved if st else 0) or 0,
+        "download": dict(_TSV_DOWNLOAD),
+    }
+
+
+def _download_tsv_job():
+    import time as _t
+
+    from app.services.clinvar_client import ClinVarClient
+
+    def prog(done: int, total: int):
+        _TSV_DOWNLOAD.update(bytes=done, total=total)
+
+    try:
+        ClinVarClient().download_tsv(force=True, progress=None, byte_progress=prog)
+        _TSV_DOWNLOAD.update(state="completed", finished_at=_t.time())
+    except Exception as exc:  # noqa: BLE001
+        _TSV_DOWNLOAD.update(state="failed", error=user_message(exc))
+
+
+@router.post("/sources/clinvar_tsv/download", status_code=202)
+def download_clinvar_tsv(bg: BackgroundTasks):
+    """Start downloading variant_summary.txt.gz (~400 MB) in the background; progress is real byte counts."""
+    import time as _t
+
+    if _TSV_DOWNLOAD["state"] == "running":
+        raise HTTPException(409, "The ClinVar TSV download is already running.")
+    _TSV_DOWNLOAD.update(state="running", bytes=0, total=None, error=None, started_at=_t.time())
+    bg.add_task(_download_tsv_job)
+    return dict(_TSV_DOWNLOAD)
+
+
+@router.get("/sources/clinvar_tsv/pipeline")
+def clinvar_tsv_status(db: Session = Depends(get_db)):
+    """Local-only view of the TSV stages (uses the cached probe; no new network request)."""
+    from app.sources.status_cache import get_probes
+
+    probes, _ = get_probes()
+    return clinvar_tsv_pipeline(probes.get("clinvar_tsv"), db.get(SourceStatus, "clinvar_tsv"))
 
 
 @router.get("/sources")
